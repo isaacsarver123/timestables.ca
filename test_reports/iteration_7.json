@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 7 retest of LongMul step-by-step wiring fixes. All 9 explicit checks PASS. StepMultiplication now renders correctly when diff-step is selected. The full step flow works: (1) data-testid=step-multiplication, mul-step-prompt, mul-step-submit, mul-partial-input-0 all render and input-0 is autofocused; (2) prompt reads 'Multiply A × {ones digit} (ones digit of B)'; (3) wrong number keeps current input visible (shake) and does not advance; (4) entering correct partials[0].smallProduct advances to mul-partial-input-1; (5) for 2-partial problem (57 × 46), after both partials mul-total-input appears; (6) entering correct total (2622) reveals mul-step-done with text '✓ 57 × 46 = 2622'; (7) HUD denominator is '/4' for step difficulty (was '/8'); (8) step-next button advances 1/4 → 2/4; (9) other difficulties (easy/medium/hard show /8 and Question component, decimals accepts '.' in answer-input). NO console errors during step play.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LongMul.jsx submit() still uses parseFloat(value) tolerance check for non-step difficulties — this code path is NOT used in step mode (StepMultiplication has its own submit), so the previously-flagged NaN issue with question.answer being undefined for step problems is now neutralized. Good.",
+    "Pre-existing concerns from iteration 6 still stand but are out of scope: Stats Recharts width(-1) warning (cosmetic), timezone-dependent yesterdayStr/todayStr in storage.js."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (9/9 checks pass)"},
+  "test_credentials": "none required",
+  "seed_data_creation": "none — read live problem partials via React fiber memoizedProps to determine expected smallProducts/total dynamically.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 7 confirmed both bugs from iteration 6 are fixed: (a) StepMultiplication is now rendered in LongMul play view via the isStep ternary, (b) HUD denominator now uses totalLen (4 for step, 8 otherwise). Verified live with problem 57×46 → partials [342, 228 shifted to 2280] → total 2622. Console clean. No further LongMul step issues found.",
+  "rca of the issue": "N/A — both issues from iteration 6 (missing JSX wiring of <StepMultiplication> and hardcoded ROUND_LEN in HUD) are confirmed fixed by main agent."
+}

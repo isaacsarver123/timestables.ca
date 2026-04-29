@@ -131,7 +131,7 @@ const LongMul = () => {
             Choose difficulty
           </div>
           <h2 className="text-xl font-bold tracking-tight text-fg mt-1">
-            {ROUND_LEN} questions · enter the final product
+            Choose how to practise
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
             {DIFFS.map((d) => (
@@ -158,23 +158,53 @@ const LongMul = () => {
             <div className="text-sm text-fg font-semibold">
               {DIFFS.find((d) => d.key === difficulty).label} ·{" "}
               <span className="font-mono">
-                {idx + 1}/{ROUND_LEN}
+                {idx + 1}/{totalLen}
               </span>
             </div>
             <div className="font-mono text-sm text-muted">
               Correct: <span className="text-fg font-bold">{correct}</span>
             </div>
           </div>
-          <div className="surface brut-border brut-shadow p-7 sm:p-9">
-            <Question
-              question={question}
-              value={value}
-              onChange={setValue}
-              onSubmit={submit}
-              status={status}
-              hint={showHint ? `${question.a} × ${question.b} = ${question.answer}` : null}
-            />
-          </div>
+          {isStep ? (
+            <div className="surface brut-border brut-shadow p-5 sm:p-7" data-testid="step-mul-card">
+              <StepMultiplication
+                problem={question}
+                onComplete={() => {
+                  addCoinsAndXp(8, 12);
+                  setCorrect((c) => c + 1);
+                }}
+                onWrong={() => {
+                  recordAnswer({
+                    a: question.a,
+                    b: question.b,
+                    op: "×",
+                    correct: false,
+                    ms: 0,
+                  });
+                }}
+              />
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={next}
+                  data-testid="step-next"
+                  className="surface brut-border brut-shadow font-bold text-sm px-5 py-2 hover:surface-2 active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all uppercase tracking-wider text-fg flex items-center gap-2"
+                >
+                  Next problem <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="surface brut-border brut-shadow p-7 sm:p-9">
+              <Question
+                question={question}
+                value={value}
+                onChange={setValue}
+                onSubmit={submit}
+                status={status}
+                hint={showHint ? `${question.a} × ${question.b} = ${question.answer}` : null}
+              />
+            </div>
+          )}
         </>
       )}
 
