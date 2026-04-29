@@ -79,9 +79,9 @@ export const Layout = ({ children }) => {
             <div className="w-9 h-9 brut-border surface grid place-items-center font-mono font-bold text-base group-hover:bg-blue-600 group-hover:text-white transition-colors">
               ×
             </div>
-            <div className="leading-tight">
-              <div className="font-bold tracking-tight text-base sm:text-lg text-fg">
-                Times Tables<span className="text-blue-600">.ca</span>
+            <div className="leading-[0.95]">
+              <div className="font-bold tracking-tight text-base sm:text-lg text-fg whitespace-nowrap">
+                Times<span className="hidden sm:inline"> </span><br className="sm:hidden" />Tables<span className="text-blue-600">.ca</span>
               </div>
             </div>
           </Link>
@@ -155,10 +155,10 @@ export const Layout = ({ children }) => {
                   </span>
                 </div>
                 <div
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
+                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface min-w-[68px]"
                   data-testid="hud-level"
                 >
-                  <span className="font-mono text-xs text-muted">L{level}</span>
+                  <span className="font-mono text-xs text-muted tabular-nums">L{Math.min(level, 9999)}</span>
                   <div className="w-10 h-1 surface-2 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-600"

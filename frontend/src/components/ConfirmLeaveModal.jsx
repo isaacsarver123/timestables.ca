@@ -9,9 +9,9 @@ export const ConfirmLeaveModal = ({
   open,
   onCancel,
   onConfirm,
-  title = "Oh no — don't leave!",
-  body = "If you leave now you'll lose all the XP you've earned this round.",
-  confirmLabel = "Yes, I'm sure — leave",
+  title = "Heads up — leaving now?",
+  body = "Your run will end. The XP and coins you've already earned this round are safe.",
+  confirmLabel = "Yes, leave",
   cancelLabel = "No, stay",
 }) => (
   <AnimatePresence>

@@ -102,7 +102,21 @@ const Streak = () => {
 
   return (
     <div className="max-w-3xl mx-auto" data-testid="streak-page">
-      <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
+      <ConfirmLeaveModal
+        open={guard.open}
+        onCancel={guard.cancel}
+        onConfirm={guard.confirm}
+        title="Are you sure?"
+        body={
+          <>
+            Okay — you earned <span className="font-bold text-fg">+{coinsEarned} coins</span> and your
+            current answer streak is <span className="font-bold text-fg">×{combo}</span>. Both are
+            already saved. Leave anyway?
+          </>
+        }
+        confirmLabel="Yes, leave"
+        cancelLabel="No, keep going"
+      />
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Mode</div>
