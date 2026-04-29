@@ -71,3 +71,11 @@
 - **Pick-the-answer mode** for Quick-Fire / Streak / Boss. New `Answer Style` toggle: Type answer / Pick answer. In choices mode, 4-button grid replaces typed input; wrong picks reveal the correct answer briefly.
 - **Compact OpPicker moved below Modes** — operation + answer-style chips on a single low-prominence card.
 - 100% pass on iteration_4 testing (14 scenarios).
+
+### Iteration 5 (this turn)
+- **Multi-select tables in Learn**: pick any subset of 1–20; double-click to select only one; counter shows count.
+- **Tips per selected table** rendered together when multiple chosen.
+- **Deeper, real tips**: rewrote `tableTips` with divisibility rules and shortcuts (e.g. ×3 digit-sum rule with worked example, ×9 digit-sum trick, ×11 alternating-sum rule, ×4 last-two-digits rule, ×8 last-three-digits rule, finger trick for 9, etc.).
+- **Flashcards: 3D flip animation** (framer-motion rotateY 0↔180° with backface-visibility), deck draws 12×N from all selected tables and shuffles.
+- **Knew it / Missed it buttons** are now solid `bg-emerald-500` / `bg-rose-500` with white bold text — fully opaque in both light and dark modes.
+- iteration_5: 100% pass.
