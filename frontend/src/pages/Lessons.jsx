@@ -460,7 +460,10 @@ export default function Lessons() {
   if (phase === "play") {
     const pct = ((idx + (status === "idle" ? 0 : 1)) / TOTAL) * 100;
     return (
-      <div className="max-w-3xl mx-auto" data-testid="lessons-page">
+      // Fit the entire play UI inside the viewport (no scroll). The container
+      // collapses the top/bottom padding the Layout adds so we get more height,
+      // and uses dvh so iOS bottom-bar collapse doesn't push content offscreen.
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}
@@ -477,7 +480,7 @@ export default function Lessons() {
           confirmLabel="Yes, leave"
           cancelLabel="No, keep going"
         />
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-3 shrink-0 pt-3 sm:pt-4">
           <button
             onClick={() => guard.tryGo("/")}
             data-testid="exit-game"
@@ -545,14 +548,16 @@ export default function Lessons() {
         </AnimatePresence>
 
         {status !== "reviewing" && q && (
-          <LessonQuestion
-            question={q}
-            onAnswer={submitChoice}
-            status={status}
-          />
+          <div className="flex-1 min-h-0 flex flex-col">
+            <LessonQuestion
+              question={q}
+              onAnswer={submitChoice}
+              status={status}
+            />
+          </div>
         )}
 
-        <div className="text-center mt-3 text-xs text-muted font-mono" data-testid="lesson-progress-text">
+        <div className="text-center mt-2 text-[11px] text-muted font-mono shrink-0 pb-2" data-testid="lesson-progress-text">
           Q{idx + 1} / {TOTAL}
         </div>
       </div>
@@ -564,7 +569,7 @@ export default function Lessons() {
     const pct = ((idx + (status === "idle" ? 0 : 1)) / TEST_QUESTIONS) * 100;
     const aimingForLevel = !!jumpAim.level;
     return (
-      <div className="max-w-3xl mx-auto" data-testid="lessons-page">
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}
@@ -574,7 +579,7 @@ export default function Lessons() {
           confirmLabel="Yes, leave"
           cancelLabel="No, keep going"
         />
-        <div className="mb-4">
+        <div className="mb-2 shrink-0 pt-3 sm:pt-4">
           <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
             {aimingForLevel ? "Jump here · level test" : "Jump here · lesson test"}
           </div>
@@ -610,17 +615,19 @@ export default function Lessons() {
         </div>
 
         {q && (
-          <Question
-            question={q}
-            value={value}
-            onChange={setValue}
-            onSubmit={submit}
-            status={status}
-            disabled={status !== "idle"}
-            correctAnswer={q.answer}
-          />
+          <div className="flex-1 min-h-0 overflow-auto">
+            <Question
+              question={q}
+              value={value}
+              onChange={setValue}
+              onSubmit={submit}
+              status={status}
+              disabled={status !== "idle"}
+              correctAnswer={q.answer}
+            />
+          </div>
         )}
-        <div className="text-center mt-3 text-xs text-muted font-mono">
+        <div className="text-center mt-2 text-[11px] text-muted font-mono shrink-0 pb-2">
           Q{idx + 1} / {TEST_QUESTIONS} · {hearts} hearts
         </div>
       </div>

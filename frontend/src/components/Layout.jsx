@@ -132,15 +132,15 @@ export const Layout = ({ children }) => {
             </nav>
           )}
 
-          <div className="flex items-center gap-1 flex-wrap justify-end min-w-0">
+          <div className="flex items-center gap-1 min-w-0 shrink-0">
             {isAuthed && state.dailyStreak?.count > 0 && (
               <div
-                className="flex items-center gap-1 px-2 py-1.5 brut-border bg-amber-300 text-zinc-950"
+                className="flex items-center gap-0.5 px-1.5 py-1 brut-border bg-amber-300 text-zinc-950"
                 data-testid="hud-streak"
                 title={`${state.dailyStreak.count}-day Daily streak`}
               >
-                <Flame size={13} />
-                <span className="font-mono text-xs font-bold tabular-nums">
+                <Flame size={12} />
+                <span className="font-mono text-[11px] font-bold tabular-nums">
                   {formatCount(state.dailyStreak.count)}
                 </span>
               </div>
@@ -148,71 +148,60 @@ export const Layout = ({ children }) => {
             <button
               onClick={toggleTheme}
               data-testid="toggle-theme"
-              className="p-2 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
+              className="p-1.5 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
               aria-label="Toggle theme"
               title={state.theme === "dark" ? "Switch to light" : "Switch to dark"}
             >
-              {state.theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+              {state.theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
             </button>
             {isAuthed && (
               <button
                 onClick={toggleSound}
                 data-testid="toggle-sound"
-                className="p-2 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
+                className="p-1.5 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
                 aria-label="Toggle sound"
                 title={state.soundOn ? "Sound on" : "Sound off"}
               >
-                {state.soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                {state.soundOn ? <Volume2 size={14} /> : <VolumeX size={14} />}
               </button>
             )}
             {isAuthed && (
               <>
                 <Link
                   to="/shop"
-                  className="flex items-center gap-1 px-2 py-1.5 brut-border surface hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:-translate-y-px transition-all cursor-pointer"
+                  className="flex items-center gap-1 px-1.5 py-1 brut-border surface hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:-translate-y-px transition-all"
                   data-testid="hud-coins"
                   title={`${state.coins.toLocaleString()} coins · go to Shop`}
                   aria-label="Open Shop"
                 >
-                  <Coins size={14} className="text-amber-500 shrink-0" />
-                  <span className="font-mono text-sm tabular-nums text-fg font-semibold">
+                  <Coins size={12} className="text-amber-500 shrink-0" />
+                  <span className="font-mono text-[11px] tabular-nums text-fg font-semibold">
                     {formatCount(state.coins)}
                   </span>
                 </Link>
                 <Link
                   to="/shop"
-                  className="flex items-center gap-1 px-2 py-1.5 brut-border surface hover:bg-cyan-100 dark:hover:bg-cyan-950/40 hover:-translate-y-px transition-all cursor-pointer"
+                  className="flex items-center gap-1 px-1.5 py-1 brut-border surface hover:bg-cyan-100 dark:hover:bg-cyan-950/40 hover:-translate-y-px transition-all"
                   data-testid="hud-gems"
                   title={`${(user?.gems ?? 0).toLocaleString()} gems · go to Shop`}
                   aria-label="Open Shop"
                 >
-                  <Gem size={14} className="text-cyan-500 shrink-0" />
-                  <span className="font-mono text-sm tabular-nums text-fg font-semibold">
+                  <Gem size={12} className="text-cyan-500 shrink-0" />
+                  <span className="font-mono text-[11px] tabular-nums text-fg font-semibold">
                     {formatCount(user?.gems ?? 0)}
                   </span>
                 </Link>
-                <div
-                  className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 brut-border surface min-w-[64px]"
-                  data-testid="hud-level"
-                >
-                  <span className="font-mono text-xs text-muted tabular-nums">L{Math.min(level, 9999)}</span>
-                  <div className="w-8 h-1 surface-2 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-600"
-                      style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                    />
-                  </div>
-                </div>
                 <Link
                   to="/settings"
                   data-testid="hud-user"
-                  title={user.email}
-                  className={`flex items-center gap-1.5 px-2 py-1.5 brut-border ${
+                  title={`${user.name} · ${user.email}`}
+                  aria-label="Profile / settings"
+                  className={`flex items-center gap-1 px-1.5 py-1 brut-border ${
                     isAdmin ? "bg-amber-300 text-zinc-950" : "surface"
                   } hover:bg-blue-600 hover:text-white`}
                 >
-                  {isAdmin ? <ShieldCheck size={13} /> : <UserIcon size={13} />}
-                  <span className="hidden lg:inline font-mono text-xs font-semibold max-w-[90px] truncate">
+                  {isAdmin ? <ShieldCheck size={12} /> : <UserIcon size={12} />}
+                  <span className="hidden xl:inline font-mono text-[11px] font-semibold max-w-[80px] truncate">
                     {user.name}
                   </span>
                 </Link>
@@ -221,9 +210,9 @@ export const Layout = ({ children }) => {
                   data-testid="hud-settings"
                   title="Settings"
                   aria-label="Settings"
-                  className="p-2 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
+                  className="p-1.5 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
                 >
-                  <SettingsIcon size={16} />
+                  <SettingsIcon size={14} />
                 </Link>
               </>
             )}
