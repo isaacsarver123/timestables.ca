@@ -1,91 +1,73 @@
-# Times Tables — Practice App PRD
+# Times Tables (timestables.ca) — PRD
 
 ## Original problem statement
-"make me an app that teaches someone timestables in a gamified way, not childish but just to help learn. make it a website thta i can acess too"
+Make a website that teaches times tables in a gamified way for teens/adults (not childish).
+Range up to ×20, daily challenges, long-mul/long-div practice, stats, shop, accounts with
+cross-device sync, $5 CAD/month subscription with a 2-day free trial, admin dashboard, and
+self-host docs for an Ubuntu server with reserved-port constraints.
 
-## User choices (locked-in)
-- Audience: Teen / Adult — NOT childish
-- Game modes: All three picks (Quick-Fire, Streak, Boss) + Daily + Long-form
-- Tables range: User-selectable subset of 1×–20× via grid + presets
-- Currency: Coins + XP + powerup shop
-- Auth/Leaderboard: deferred (local-only)
-- Aesthetic: WHITE / light theme primary with neo-brutalist black outlines + 4px hard shadows. Dark mode toggle in header.
-- Sound effects: on by default, toggle in header.
-- Operation: × / ÷ / Both — picker prominent on homepage.
-- Learn methods: Table view + Tips, Flashcards, Multiple Choice, Skip Counting, 10-Q Drill.
-- Long-form practice: Long Multiplication (2×1, 2×2, 3×2) and Long Division (whole-number quotients) — 3 difficulty tiers each.
+## Locked-in user choices
+- **Audience:** teen / adult — neo-brutalist UI (white + black outlines, dark mode toggle).
+- **Game modes:** Quick-Fire, Streak, Boss, Daily, Learn, Long-Mul, Long-Div (incl. remainder).
+- **Tables range:** subset of 1×–20× with grid + presets.
+- **Auth:** custom email/password JWT (httpOnly cookies, bcrypt).
+- **Subscription:** Stripe `mode=subscription`, $5 CAD/month, 2-day server-managed trial.
+- **Anti-abuse:** unique email AND unique IP per trial. Admin role exempt.
+- **Admin (Isaac):** `isaac@timestables.ca` — full access without paying; sees `/admin`
+  with Dashboard / Users / CMS tabs.
+- **Self-host target:** Ubuntu host with reserved ports `80, 443, 3000, 3001, 3002, 8001,
+  8002, 8847, 18789, 27017, 11434, 1000`. MongoDB volume bind-mounted to `MATHACCOUNTS`.
 
 ## Architecture
-- Frontend-only React app (CRA + craco). State in localStorage `tt_arena_state_v2`.
-- Routes: `/`, `/learn`, `/play/quickfire`, `/play/streak`, `/play/boss`, `/play/daily`, `/play/long-mul`, `/play/long-div`, `/stats`, `/shop`.
-- No backend usage in v3.
+- **Frontend:** React (CRA + craco), TailwindCSS, framer-motion, recharts. Routes wrapped
+  in `<PaywallGuard>` which redirects guests to `/login` and shows `<Paywall>` to expired
+  users. Top nav and HUD pills are only rendered when authenticated.
+- **Backend:** FastAPI + Motor + Mongo. JWT auth (PyJWT), bcrypt, raw `stripe` SDK.
+- **Sync:** localStorage shape mirrored to `db.user_state` per user (debounced 800ms).
 
-## Implemented (rolling)
-### Iteration 1 (MVP)
-- Layout shell, Range selector 1–12, Quick-Fire/Streak/Boss, Stats, Shop.
+## Implementation log
 
-### Iteration 2 (theme + learn + daily + sound + division)
-- Light/Dark theme toggle (CSS vars, html.dark class).
-- Tables extended to 1–20.
-- Operation modes ×/÷/Both.
-- Learn page (table view + tips + 10-Q drill).
-- Daily Challenge (30 questions, seeded by date, once per day).
-- Web Audio sfx (correct/wrong/coin/levelup), header toggle.
+### v3 (this fork)
+- **Auth (JWT):** register / login / logout / me / refresh; brute-force lock 5/15min;
+  httpOnly cookies (`samesite=none`, `secure=true`).
+- **2-day server-managed trial** on register; `serialize_user()` exposes `in_trial`,
+  `trial_seconds_left`, `has_access`. Admins always have access.
+- **Anti-abuse:** unique email + unique IP per trial (toggle via `ALLOW_MULTI_SIGNUP_PER_IP`).
+- **Cross-device sync:** `GET/PUT /api/user/state`; `initRemoteSync()` hydrates localStorage
+  on login, debounced PUTs on every state change.
+- **Stripe (raw SDK, subscription mode):** `/api/stripe/checkout` creates a `mode=subscription`
+  session ($5 CAD/mo, allow_promotion_codes); `/api/stripe/status/{id}`; `/api/stripe/portal`
+  (Stripe Billing Portal); `/api/webhook/stripe`. `STRIPE_SECRET_KEY` is empty placeholder
+  → endpoint returns 503 with friendly message until user pastes their rotated key.
+  `_sync_subscription_from_stripe()` pulls `current_period_end`, brand, last4 → shown in
+  Settings → Billing.
+- **Trial banner** with countdown + Subscribe button + dismiss; goes urgent (rose) under 12h.
+- **Settings → Account + Billing** sections (sign-in / out, billing tiles, Manage Subscription).
+- **Top nav locked for guests** — header only shows brand + Sign in until login.
+- **Admin (Isaac):** seeded on startup (`ADMIN_EMAIL=isaac@timestables.ca`).
+  `/admin` page: Dashboard (users, MRR, revenue, 30-day signup chart, 30-day revenue chart,
+  recent payments) · Users (search by email) · CMS (hero title/subtitle, paywall blurb,
+  announcement banner). Public CMS via `GET /api/cms/public` feeds Home hero + Paywall.
+- **Self-host docs:** `/app/SELF_HOST.md` + `/app/docker-compose.yml` (Caddy edge proxy,
+  app containers bound to 127.0.0.1, MongoDB volume → `MATHACCOUNTS/timestables-mongo`).
 
-### Iteration 3 (this turn)
-- Prominent Operation picker (`OpPicker`) on home — Multiplication/Division/Both as 3 tiles.
-- Learn methods expanded: tabs for Table, Flashcards, Multiple Choice, Skip Counting, Drill.
-- Flashcards: 12-card front/back flip set, "Knew it" / "Missed it" tracking.
-- Multiple Choice: 4 options, instant feedback.
-- Skip Counting: fill-in-the-blank in a multiples sequence.
-- Long Multiplication mode (`/play/long-mul`) with Easy/Medium/Hard.
-- Long Division mode (`/play/long-div`) with Easy/Medium/Hard.
-- Op chips removed from RangeSelector; live in OpPicker now.
-
-## Personas
-- Refresher / Teen / Speed Junkie / Multi-digit returner.
+### Test history (forked session)
+- iteration_8: 11/12 backend, 100% frontend (Stripe needed migration off raw stripe).
+- iteration_9: Stripe migrated to emergentintegrations — passed.
+- iteration_10: 21/21 backend, 100% frontend after migration BACK to raw stripe + admin/CMS/IP-gate added.
 
 ## Backlog
-### P0 (next)
-- User accounts + login + cross-device sync.
-- Global leaderboard.
+### P0
+- User to paste rotated `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` + `STRIPE_WEBHOOK_SECRET`
+  in `/app/backend/.env` and re-test the full Stripe flow end-to-end.
 
 ### P1
-- Decimal multiplication mode (e.g. 1.5 × 8).
-- Long-division **with remainder** option.
-- Spaced-repetition flashcards (review missed cards).
-- Daily streak counter (consecutive days completed).
+- Global leaderboards (deferred from v2).
+- Email reset / verify links (currently logs to console).
+- Production webhook signature enforcement guard (refuse if `STRIPE_WEBHOOK_SECRET` blank
+  in non-DEV mode).
 
 ### P2
-- Achievements / badges.
-- Shareable result cards (PNG export).
-- Onboarding tour for first-time visitors.
-
-## Test history
-- iteration_1: 100% pass
-- iteration_2: 100% pass
-- iteration_3: 100% pass (all 14 features verified)
-
-### Iteration 4 (this turn)
-- **Step-by-Step Long Division solver** (`/play/long-div` → "Step-by-Step"). Visual long-division layout with quotient input slots; each correct digit reveals the product subtraction and remainder, just like solving on paper. 4 problems per round.
-- **Pick-the-answer mode** for Quick-Fire / Streak / Boss. New `Answer Style` toggle: Type answer / Pick answer. In choices mode, 4-button grid replaces typed input; wrong picks reveal the correct answer briefly.
-- **Compact OpPicker moved below Modes** — operation + answer-style chips on a single low-prominence card.
-- 100% pass on iteration_4 testing (14 scenarios).
-
-### Iteration 5 (this turn)
-- **Multi-select tables in Learn**: pick any subset of 1–20; double-click to select only one; counter shows count.
-- **Tips per selected table** rendered together when multiple chosen.
-- **Deeper, real tips**: rewrote `tableTips` with divisibility rules and shortcuts (e.g. ×3 digit-sum rule with worked example, ×9 digit-sum trick, ×11 alternating-sum rule, ×4 last-two-digits rule, ×8 last-three-digits rule, finger trick for 9, etc.).
-- **Flashcards: 3D flip animation** (framer-motion rotateY 0↔180° with backface-visibility), deck draws 12×N from all selected tables and shuffles.
-- **Knew it / Missed it buttons** are now solid `bg-emerald-500` / `bg-rose-500` with white bold text — fully opaque in both light and dark modes.
-- iteration_5: 100% pass.
-
-### Iteration 6 + 7 (this turn)
-- **Stats: 30-day progress chart** (recharts `AreaChart` of correct + total per day; uses new `state.history` daily buckets written by `recordAnswer`).
-- **Settings page** (`/settings`, header nav-settings): Preferences (theme + sound), Account placeholder ("Sign-in coming soon"), Data (export/import JSON), Reset (preferences / stats / everything) — each with confirm dialog.
-- **Daily-streak counter**: `state.dailyStreak = { count, lastDate }`. Yesterday → +1, same date → no-op, otherwise → 1. Displayed on Daily page (badge) and in header (hud-streak when > 0).
-- **Decimal multiplication mode** in Long Multiplication (`diff-decimals`). Question.jsx allows `.` in input; submit uses `parseFloat` with tolerance.
-- **Long-division-with-remainder** mode in Long Division (`diff-rem-easy/medium/hard`). Dual-input UI (`rem-q-input`, `rem-r-input`).
-- **Step-by-Step Long Multiplication** (`diff-step` in LongMul) — new `StepMultiplication` component with canonical paper layout, partial-product input slots, then a final-sum input.
-- **Step-difficulty selector** for Step-by-Step Long Division: brief is now 3 sections × 3 levels (`diff-step-easy/medium/hard`).
-- iteration_6 → iteration_7 (after fix): 100% pass on the retest.
+- Admin: per-user actions (refund last payment, force-cancel sub, comp 30 days).
+- Achievements / badges, shareable result cards.
+- Spaced-repetition flashcards review.
