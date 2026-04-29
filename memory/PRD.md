@@ -27,7 +27,19 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v3 (this fork)
+### v4.1 — Mobile + UX polish (this round)
+- **Mobile responsiveness pass:** Settings, Admin Users + Recent Payments rows wrap cleanly at 390px wide (tested via testing agent — no horizontal scroll).
+- **QuickFire end-screen:** "Time" + "UP." inline, same colour, "UP." pops big → shrinks (`time-up-up` testid).
+- **Wrong-answer reveal:** Question component now flashes the correct number with a bouncy scale on wrong-typed answers (`wrong-answer-reveal`). Wired in QuickFire / Streak / Boss / Daily.
+- **Confirm-on-leave:** new `useNavGuard` hook + `<ConfirmLeaveModal>` ("Oh no — don't leave!"). Wired into all four game-mode Exit buttons + `beforeunload`.
+- **CardOnFile:** new component with inline SVG brand logos for Visa, Mastercard, Amex, Discover, JCB, Diners, UnionPay. Replaces the small "Card on file" tile on the active-subscription panel and adds a "$5.00 CAD will be charged to your **brand** ending in 1234 each month" copy line.
+- **Settings cleanup:** Import removed; "Need help?" moved to bottom as plain underlined text links (mailto/tel) — no button styling.
+- **Admin: delete user** — `DELETE /api/admin/users/{id}` with cascades (user_state, payment_transactions, login_attempts) + last-admin and self-delete guards. UI delete confirm modal with "Are you sure you want to delete?".
+- **Learn tips refactor:** typed entries `{kind, text}` rendered with category pills (TRICK/RULE/PATTERN/ANCHOR/FORMULA, colour-coded). Content unchanged but presentation is far cleaner.
+- **Streak combo persistence:** verified — combo only resets on a wrong answer or restart, not between questions.
+- Tests: **100%** pass, 34/34 backend + all runtime-testable frontend items.
+
+### v3 (prior)
 - **Auth (JWT):** register / login / logout / me / refresh; brute-force lock 5/15min;
   httpOnly cookies (`samesite=none`, `secure=true`).
 - **2-day server-managed trial** on register; `serialize_user()` exposes `in_trial`,
@@ -57,6 +69,38 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 - iteration_10: 21/21 backend, 100% frontend after migration BACK to raw stripe + admin/CMS/IP-gate added.
 
 ## Backlog
+
+### v5 — explicitly queued for the next round (locked-in spec)
+**Gameplay**
+- **Lessons mode** — 20 questions, full-screen like Quick-Fire, top progress bar, 3 hard-question dots beside it on the right. Topic multi-select (multiplication, division, long-mul, long-div) — picking "All" unselects the others and runs everything. XP reward proportional to economy. Duolingo-style explanation when wrong: "no, this isn't the answer — here's why".
+- **Per-question timer × 0.75** of current Quick-Fire pace.
+- **Streak freeze** (gem-priced, ice-block icon). Cancels perfect streaks if you miss. Streak section shows `1/2 equipped` + streak calendar.
+- **Streak calendar** with **connected bars** for perfect-streak days (4+ in a row, no misses) instead of yellow dots; isolated done-days still get yellow circles.
+- **XP boost** in Shop with quantity badge + Use button beside Buy on the same card.
+- **Practice history per day** in Settings (replaces JSON export).
+
+**Currency / store**
+- **Gems** as a second currency. Earn from perfect rounds, day-streak milestones, leaderboard top 3. Buy-gems UI shipped with graceful 503 until Stripe key is set.
+- **Card-on-file display** already shipped — gem-purchase confirmation will reuse the same component + "charged to your **brand** ending in 1234".
+
+**Social**
+- **Profiles** — avatar (initials → full builder later), public stats, achievements list. **Privacy toggle** (private profiles can't be added).
+- **Friends** — friend-code-based add (TT-XXXXX), list, remove. Friends visible on profile + future leaderboard.
+- **Achievements** — badges (first 100 questions, 7-day streak, perfect Quick-Fire, etc.) detected client-side, shown on profile.
+- **Leaderboard** + **Leagues** — Bronze → Silver → Gold → Sapphire → Ruby → Diamond → Obsidian, weekly Mon 00:00 UTC reset, top 5 promote / bottom 5 demote, top 3 rewards 30/20/10 gems.
+
+**Content / CMS**
+- **Shopify-grade CMS** — every visible string editable + free-form key/value editor. **Stripe key field at the top of the editor** (writes through to backend env).
+- **Daily reminder email** ("your streak's at risk!") — needs Resend or SendGrid key.
+
+**Ops**
+- Extended SELF_HOST.md: install on Ubuntu **alongside other services**, Caddy config that coexists with whatever's on :80/:443, **systemd no-Docker alternative**, backup script.
+
+### P2
+- High-contrast theme variants
+- Sound on/off per-effect
+- Practice history CSV export per-day
+
 ### P0
 - User to paste rotated `STRIPE_SECRET_KEY` + `STRIPE_PUBLISHABLE_KEY` + `STRIPE_WEBHOOK_SECRET`
   in `/app/backend/.env` and re-test the full Stripe flow end-to-end.

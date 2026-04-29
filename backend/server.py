@@ -718,9 +718,15 @@ async def admin_users_delete(user_id: str, admin: dict = Depends(get_admin_user)
     target = await db.users.find_one({"_id": oid})
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin":
+        admin_count = await db.users.count_documents({"role": "admin"})
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Can't delete the last admin.")
     await db.users.delete_one({"_id": oid})
     await db.user_state.delete_many({"user_id": str(oid)})
     await db.payment_transactions.delete_many({"user_id": str(oid)})
+    if target.get("email"):
+        await db.login_attempts.delete_many({"identifier": {"$regex": f":{target['email']}$"}})
     return {"deleted": True, "id": str(oid)}
 
 
