@@ -932,7 +932,10 @@ function LessonPath({
   onStart,
   onJumpHere,
 }) {
-  // Find next-up lesson across the entire path so we can pulse it.
+  // Single source of truth for which lesson popover is open. Ensures only one
+  // popover ever appears at a time — no overlapping cards.
+  const [openId, setOpenId] = useState(null);
+
   let nextLessonId = null;
   outer: for (const lv of path) {
     for (const l of lv.lessons) {
@@ -994,6 +997,9 @@ function LessonPath({
                       done={lessonDone}
                       unlocked={lessonUnlocked}
                       isNext={isNext}
+                      isOpen={openId === lesson.id}
+                      requestOpen={() => setOpenId(lesson.id)}
+                      requestClose={() => setOpenId((cur) => (cur === lesson.id ? null : cur))}
                       onStart={() => onStart(lesson, unit)}
                       onJump={() => onJumpHere(lesson)}
                     />
@@ -1016,15 +1022,15 @@ function LessonPath({
 // A single lesson node + a popover that appears on hover/focus (or tap on
 // touch devices) offering Start / Jump-here. Done lessons show no popover.
 // ─────────────────────────────────────────────────────────────────────────
-function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sideHint }) {
-  const [open, setOpen] = useState(false);
+function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sideHint, isOpen, requestOpen, requestClose }) {
   const closeTimer = useRef(null);
   const cancelClose = () => { if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } };
   const scheduleClose = () => {
     cancelClose();
-    closeTimer.current = setTimeout(() => setOpen(false), 220); // generous; lets cursor traverse
+    closeTimer.current = setTimeout(() => requestClose(), 220);
   };
-  const openNow = () => { cancelClose(); setOpen(true); };
+  const openNow = () => { cancelClose(); requestOpen(); };
+  const open = isOpen;
 
   // Decide which side the popover sits on. `sideHint` from parent: 'right' is
   // default; pass 'left' for nodes near the right edge so the popover doesn't
@@ -1051,14 +1057,13 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
           e.stopPropagation();
           cancelClose();
           if (done) {
-            // Completed lessons re-run as practice on direct click.
             onStart();
-            setOpen(false);
+            requestClose();
           } else if (unlocked) {
             onStart();
-            setOpen(false);
+            requestClose();
           } else {
-            setOpen((v) => !v);
+            if (isOpen) requestClose(); else requestOpen();
           }
         }}
         onFocus={openNow}
@@ -1130,7 +1135,7 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
               {done ? (
                 // Completed lesson → "Practice" only.
                 <button
-                  onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
+                  onClick={(e) => { e.stopPropagation(); onStart(); requestClose(); }}
                   data-testid={`lesson-path-practice-${lesson.id}`}
                   className="flex-1 brut-border brut-shadow-sm bg-emerald-500 text-white font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
                 >
@@ -1140,7 +1145,7 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
                 // Next-up unlocked lesson → "Start" only (no Jump, since the
                 // user's already at the right spot).
                 <button
-                  onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
+                  onClick={(e) => { e.stopPropagation(); onStart(); requestClose(); }}
                   data-testid={`lesson-path-start-${lesson.id}`}
                   className="flex-1 brut-border brut-shadow-sm bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
                 >
@@ -1149,7 +1154,7 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
               ) : (
                 // Locked / further ahead → "Jump here" only.
                 <button
-                  onClick={(e) => { e.stopPropagation(); onJump(); setOpen(false); }}
+                  onClick={(e) => { e.stopPropagation(); onJump(); requestClose(); }}
                   data-testid={`lesson-path-jump-${lesson.id}`}
                   className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
                 >
