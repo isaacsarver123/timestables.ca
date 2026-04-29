@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Play, Layers, ListChecks, Hash, BookText } from "lucide-react";
+import { ArrowLeft, Play, Layers, ListChecks, Hash, BookText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   tableTips,
@@ -13,7 +13,7 @@ import Question from "@/components/Question";
 import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
 import { sfx } from "@/lib/sound";
 
-const TABLES = Array.from({ length: 20 }, (_, i) => i + 1);
+const ALL = Array.from({ length: 20 }, (_, i) => i + 1);
 const ROWS = Array.from({ length: 12 }, (_, i) => i + 1);
 const DRILL_LEN = 10;
 
@@ -25,10 +25,21 @@ const TABS = [
   { key: "drill", label: "Drill", Icon: Play },
 ];
 
+const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 const Learn = () => {
-  const [n, setN] = useState(7);
+  const [tables, setTables] = useState([7]);
   const [tab, setTab] = useState("table");
-  const tips = tableTips(n);
+
+  const toggle = (n) => {
+    setTables((cur) => {
+      const next = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n];
+      if (next.length === 0) return cur; // require at least one
+      return next.sort((a, b) => a - b);
+    });
+  };
+
+  const setOne = (n) => setTables([n]);
 
   return (
     <div className="space-y-6" data-testid="learn-page">
@@ -42,23 +53,30 @@ const Learn = () => {
         </Link>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg mt-2">Learn</h1>
         <p className="text-sm text-muted mt-1">
-          Pick a table, then study it your way.
+          Pick one or more tables, then study them your way. Mixing tables makes drills harder.
         </p>
       </div>
 
       {/* Table picker */}
       <div className="surface brut-border p-4">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium mb-3">
-          Pick a table (1–20)
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
+            Pick tables (1–20) — tap to toggle, hold-pick a single by selecting just one
+          </div>
+          <div className="text-xs font-mono text-muted">
+            {tables.length} selected
+          </div>
         </div>
         <div className="grid grid-cols-10 gap-1.5 sm:gap-2" data-testid="learn-table-picker">
-          {TABLES.map((x) => (
+          {ALL.map((x) => (
             <button
               key={x}
-              onClick={() => setN(x)}
+              onClick={() => toggle(x)}
+              onDoubleClick={() => setOne(x)}
               data-testid={`learn-pick-${x}`}
+              title="Click to toggle · double-click to select only this"
               className={`aspect-square brut-border font-mono text-sm sm:text-base font-bold grid place-items-center transition-all ${
-                x === n ? "bg-blue-600 text-white" : "surface text-fg hover:surface-2"
+                tables.includes(x) ? "bg-blue-600 text-white" : "surface text-fg hover:surface-2"
               }`}
             >
               {x}
@@ -92,64 +110,106 @@ const Learn = () => {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${tab}-${n}`}
+          key={`${tab}-${tables.join(",")}`}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.16 }}
         >
-          {tab === "table" && <TableView n={n} tips={tips} />}
-          {tab === "flash" && <FlashView n={n} />}
-          {tab === "choices" && <ChoicesView n={n} />}
-          {tab === "skip" && <SkipView n={n} />}
-          {tab === "drill" && <DrillView n={n} />}
+          {tab === "table" && <TableView tables={tables} />}
+          {tab === "flash" && <FlashView tables={tables} />}
+          {tab === "choices" && <ChoicesView tables={tables} />}
+          {tab === "skip" && <SkipView tables={tables} />}
+          {tab === "drill" && <DrillView tables={tables} />}
         </motion.div>
       </AnimatePresence>
     </div>
   );
 };
 
-// ───────── Table view ─────────
-const TableView = ({ n, tips }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div className="surface brut-border p-5" data-testid="learn-table-list">
-      <div className="flex items-baseline gap-3 mb-4">
-        <div className="font-mono font-black text-4xl text-fg">×{n}</div>
-        <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">table</div>
+// ───────── Table view (with tips for every selected table) ─────────
+const TableView = ({ tables }) => {
+  if (tables.length === 1) {
+    const n = tables[0];
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SingleTable n={n} />
+        <SingleTips n={n} />
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {ROWS.map((r) => (
-          <div
-            key={r}
-            className="brut-border-soft px-3 py-2 flex items-center justify-between font-mono text-fg"
-          >
-            <span className="text-sm">
-              {r} × {n}
-            </span>
-            <span className="text-base font-bold tabular-nums">{r * n}</span>
-          </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {tables.map((n) => (
+          <SingleTable key={n} n={n} compact />
         ))}
+      </div>
+      <div className="surface brut-border p-5">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
+          Tips for {tables.length} tables
+        </div>
+        <div className="mt-3 divide-y divide-zinc-200 dark:divide-zinc-800">
+          {tables.map((n) => (
+            <div key={n} className="py-3 first:pt-0 last:pb-0">
+              <div className="font-mono font-black text-xl text-fg mb-2">×{n}</div>
+              <ul className="space-y-1.5">
+                {tableTips(n).map((t, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-fg">
+                    <span className="font-mono text-blue-600 font-bold mt-0.5">→</span>
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
-    <div className="surface brut-border p-5" data-testid="learn-tips">
-      <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
-        Tips for ×{n}
-      </div>
-      <ul className="mt-3 space-y-2.5">
-        {tips.map((t, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-fg">
-            <span className="font-mono text-blue-600 font-bold">→</span>
-            <span>{t}</span>
-          </li>
-        ))}
-      </ul>
+  );
+};
+
+const SingleTable = ({ n, compact = false }) => (
+  <div className="surface brut-border p-5" data-testid={`learn-table-list-${n}`}>
+    <div className="flex items-baseline gap-3 mb-3">
+      <div className={`font-mono font-black ${compact ? "text-2xl" : "text-4xl"} text-fg`}>×{n}</div>
+      <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">table</div>
+    </div>
+    <div className={`grid ${compact ? "grid-cols-2" : "grid-cols-2"} gap-1.5`}>
+      {ROWS.map((r) => (
+        <div
+          key={r}
+          className="brut-border-soft px-3 py-1.5 flex items-center justify-between font-mono text-fg"
+        >
+          <span className="text-sm">
+            {r} × {n}
+          </span>
+          <span className="text-base font-bold tabular-nums">{r * n}</span>
+        </div>
+      ))}
     </div>
   </div>
 );
 
-// ───────── Flashcards ─────────
-const FlashView = ({ n }) => {
-  const [cards, setCards] = useState(() => flashcardSet(n));
+const SingleTips = ({ n }) => (
+  <div className="surface brut-border p-5" data-testid="learn-tips">
+    <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
+      Tips for ×{n}
+    </div>
+    <ul className="mt-3 space-y-2.5">
+      {tableTips(n).map((t, i) => (
+        <li key={i} className="flex items-start gap-2 text-sm text-fg">
+          <span className="font-mono text-blue-600 font-bold mt-0.5">→</span>
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
+// ───────── Flashcards (with 3D flip animation) ─────────
+const FlashView = ({ tables }) => {
+  const [cards, setCards] = useState(() => flashcardSet(tables));
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [knew, setKnew] = useState(0);
@@ -157,12 +217,12 @@ const FlashView = ({ n }) => {
   const done = idx >= cards.length;
 
   useEffect(() => {
-    setCards(flashcardSet(n));
+    setCards(flashcardSet(tables));
     setIdx(0);
     setFlipped(false);
     setKnew(0);
     setMissed(0);
-  }, [n]);
+  }, [tables]);
 
   const card = cards[idx];
 
@@ -179,7 +239,7 @@ const FlashView = ({ n }) => {
   };
 
   const restart = () => {
-    setCards(flashcardSet(n));
+    setCards(flashcardSet(tables));
     setIdx(0);
     setFlipped(false);
     setKnew(0);
@@ -189,9 +249,12 @@ const FlashView = ({ n }) => {
   if (done) {
     return (
       <div className="surface brut-border brut-shadow p-7 text-center" data-testid="flash-done">
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Set complete</div>
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+          Set complete
+        </div>
         <h2 className="text-4xl font-black tracking-tighter mt-1 text-fg">
-          {knew}<span className="text-muted">/{cards.length}</span>
+          {knew}
+          <span className="text-muted">/{cards.length}</span>
         </h2>
         <p className="text-sm text-muted mt-2">
           Knew: {knew} · Missed: {missed}
@@ -218,35 +281,69 @@ const FlashView = ({ n }) => {
           <span className="text-fg font-bold">{missed}</span>
         </span>
       </div>
-      <button
+
+      {/* 3D flip card */}
+      <div
+        className="w-full"
+        style={{ perspective: "1200px" }}
         onClick={() => setFlipped((f) => !f)}
         data-testid="flash-card"
-        className={`w-full surface brut-border brut-shadow-lg p-10 sm:p-14 text-center transition-transform ${
-          flipped ? "bg-amber-50 dark:bg-amber-500/10" : ""
-        }`}
       >
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">
-          {flipped ? "Answer" : "Front"}
-        </div>
-        <div className="font-mono font-black text-6xl sm:text-7xl text-fg">
-          {flipped ? card.back : card.front}
-        </div>
-        <div className="mt-6 text-xs text-muted font-mono">
-          {flipped ? "tap to hide" : "tap to flip"}
-        </div>
-      </button>
+        <motion.div
+          animate={{ rotateY: flipped ? 180 : 0 }}
+          transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+          style={{ transformStyle: "preserve-3d" }}
+          className="relative w-full cursor-pointer"
+        >
+          {/* Front */}
+          <div
+            style={{ backfaceVisibility: "hidden" }}
+            className="surface brut-border brut-shadow-lg p-10 sm:p-14 text-center"
+          >
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">
+              Front
+            </div>
+            <div className="font-mono font-black text-6xl sm:text-7xl text-fg" data-testid="flash-front">
+              {card.front}
+            </div>
+            <div className="mt-6 text-xs text-muted font-mono">tap to flip</div>
+          </div>
+          {/* Back (rotated 180° behind the front) */}
+          <div
+            style={{
+              backfaceVisibility: "hidden",
+              transform: "rotateY(180deg)",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            className="surface brut-border brut-shadow-lg p-10 sm:p-14 text-center bg-amber-50 dark:bg-amber-500/15"
+          >
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">
+              Answer
+            </div>
+            <div className="font-mono font-black text-6xl sm:text-7xl text-fg" data-testid="flash-back">
+              {card.back}
+            </div>
+            <div className="mt-6 text-xs text-muted font-mono">tap to hide</div>
+          </div>
+        </motion.div>
+      </div>
+
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <button
           onClick={() => mark(false)}
           data-testid="flash-missed"
-          className="brut-border brut-shadow-sm p-3 bg-rose-200 dark:bg-rose-500/20 text-zinc-950 dark:text-fg font-bold uppercase tracking-wider text-sm hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none"
+          className="brut-border brut-shadow-sm p-3 bg-rose-500 text-white font-bold uppercase tracking-wider text-sm hover:bg-rose-600 hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none transition-all"
         >
           Missed it
         </button>
         <button
           onClick={() => mark(true)}
           data-testid="flash-knew"
-          className="brut-border brut-shadow-sm p-3 bg-emerald-200 dark:bg-emerald-500/20 text-zinc-950 dark:text-fg font-bold uppercase tracking-wider text-sm hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none"
+          className="brut-border brut-shadow-sm p-3 bg-emerald-500 text-white font-bold uppercase tracking-wider text-sm hover:bg-emerald-600 hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none transition-all"
         >
           Knew it
         </button>
@@ -255,10 +352,10 @@ const FlashView = ({ n }) => {
   );
 };
 
-// ───────── Multiple choice ─────────
-const ChoicesView = ({ n }) => {
+// ───────── Multiple choice (across all selected tables) ─────────
+const ChoicesView = ({ tables }) => {
   const buildRound = () => {
-    const q = generateQuestion([n], { maxFactor: 12, minFactor: 1, op: "mul" });
+    const q = generateQuestion(tables, { maxFactor: 12, minFactor: 1, op: "mul" });
     return { q, choices: generateChoices(q, 4) };
   };
   const [round, setRound] = useState(buildRound);
@@ -272,7 +369,7 @@ const ChoicesView = ({ n }) => {
     setScore(0);
     setCount(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [n]);
+  }, [tables.join(",")]);
 
   const choose = (c) => {
     if (picked != null) return;
@@ -297,7 +394,9 @@ const ChoicesView = ({ n }) => {
   return (
     <div className="surface brut-border brut-shadow p-6 sm:p-8" data-testid="choices-view">
       <div className="flex items-center justify-between mb-4 text-sm font-mono">
-        <span className="text-muted">×{n} · Multiple choice</span>
+        <span className="text-muted">
+          {tables.length === 1 ? `×${tables[0]}` : `${tables.length} tables`} · Multiple choice
+        </span>
         <span className="text-fg font-bold">
           {score}/{count}
         </span>
@@ -310,13 +409,12 @@ const ChoicesView = ({ n }) => {
           {round.q.prompt} <span className="opacity-30">=</span>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mt-7" data-testid="choice-grid">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mt-7" data-testid="choices-grid">
         {round.choices.map((c) => {
           const isPicked = picked === c;
           const isCorrect = round.q.answer === c;
           let style = "surface text-fg hover:surface-2";
-          if (picked != null && isCorrect)
-            style = "bg-emerald-500 text-white";
+          if (picked != null && isCorrect) style = "bg-emerald-500 text-white";
           else if (isPicked && !isCorrect) style = "bg-red-500 text-white";
           return (
             <button
@@ -335,21 +433,26 @@ const ChoicesView = ({ n }) => {
   );
 };
 
-// ───────── Skip-counting ─────────
-const SkipView = ({ n }) => {
-  const [round, setRound] = useState(() => generateSkipCounting(n));
+// ───────── Skip-counting (random table from selection per round) ─────────
+const SkipView = ({ tables }) => {
+  const buildRound = () => {
+    const t = pickRandom(tables);
+    return generateSkipCounting(t);
+  };
+  const [round, setRound] = useState(buildRound);
   const [value, setValue] = useState("");
   const [status, setStatus] = useState("idle");
   const [score, setScore] = useState(0);
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    setRound(generateSkipCounting(n));
+    setRound(buildRound());
     setValue("");
     setStatus("idle");
     setScore(0);
     setCount(0);
-  }, [n]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tables.join(",")]);
 
   const submit = () => {
     if (status !== "idle") return;
@@ -367,7 +470,7 @@ const SkipView = ({ n }) => {
     }
     setCount((c) => c + 1);
     setTimeout(() => {
-      setRound(generateSkipCounting(n));
+      setRound(buildRound());
       setValue("");
       setStatus("idle");
     }, 700);
@@ -376,12 +479,18 @@ const SkipView = ({ n }) => {
   return (
     <div className="surface brut-border brut-shadow p-6 sm:p-8" data-testid="skip-view">
       <div className="flex items-center justify-between mb-4 text-sm font-mono">
-        <span className="text-muted">Count by {n}</span>
+        <span className="text-muted">
+          Count by {round.table}
+          {tables.length > 1 ? ` (random from ${tables.length} tables)` : ""}
+        </span>
         <span className="text-fg font-bold">
           {score}/{count}
         </span>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3" data-testid="skip-sequence">
+      <div
+        className="flex flex-wrap items-center justify-center gap-2 sm:gap-3"
+        data-testid="skip-sequence"
+      >
         {round.seq.map((v, i) => {
           const blank = i === round.blank;
           if (blank) {
@@ -430,13 +539,13 @@ const SkipView = ({ n }) => {
   );
 };
 
-// ───────── Drill (existing 10-question quick) ─────────
-const DrillView = ({ n }) => {
+// ───────── Drill (across all selected) ─────────
+const DrillView = ({ tables }) => {
   const [running, setRunning] = useState(true);
   const [idx, setIdx] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [question, setQuestion] = useState(() =>
-    generateQuestion([n], { maxFactor: 12, minFactor: 1, op: "mul" })
+    generateQuestion(tables, { maxFactor: 12, minFactor: 1, op: "mul" })
   );
   const [value, setValue] = useState("");
   const [status, setStatus] = useState("idle");
@@ -447,12 +556,13 @@ const DrillView = ({ n }) => {
     setRunning(true);
     setIdx(0);
     setCorrect(0);
-    setQuestion(generateQuestion([n], { maxFactor: 12, minFactor: 1, op: "mul" }));
+    setQuestion(generateQuestion(tables, { maxFactor: 12, minFactor: 1, op: "mul" }));
     setValue("");
     setStatus("idle");
     setShowHint(false);
     startTs.current = performance.now();
-  }, [n]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tables.join(",")]);
 
   const next = () => {
     if (idx + 1 >= DRILL_LEN) {
@@ -461,7 +571,7 @@ const DrillView = ({ n }) => {
     }
     setIdx((i) => i + 1);
     setQuestion((q) =>
-      generateQuestion([n], { lastKey: q.key, maxFactor: 12, minFactor: 1, op: "mul" })
+      generateQuestion(tables, { lastKey: q.key, maxFactor: 12, minFactor: 1, op: "mul" })
     );
     setValue("");
     setStatus("idle");
@@ -493,16 +603,21 @@ const DrillView = ({ n }) => {
   if (!running) {
     return (
       <div className="surface brut-border brut-shadow p-7 text-center" data-testid="drill-results">
-        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Drill complete</div>
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+          Drill complete
+        </div>
         <h2 className="text-4xl font-black tracking-tighter mt-1 text-fg">
-          {correct}<span className="text-muted">/{DRILL_LEN}</span>
+          {correct}
+          <span className="text-muted">/{DRILL_LEN}</span>
         </h2>
         <button
           onClick={() => {
             setRunning(true);
             setIdx(0);
             setCorrect(0);
-            setQuestion(generateQuestion([n], { maxFactor: 12, minFactor: 1, op: "mul" }));
+            setQuestion(
+              generateQuestion(tables, { maxFactor: 12, minFactor: 1, op: "mul" })
+            );
             setValue("");
             setStatus("idle");
             setShowHint(false);
@@ -520,7 +635,7 @@ const DrillView = ({ n }) => {
     <div className="space-y-3" data-testid="drill-active">
       <div className="surface brut-border p-3 flex items-center justify-between">
         <div className="text-sm text-fg font-semibold">
-          Drill ×{n} ·{" "}
+          Drill {tables.length === 1 ? `×${tables[0]}` : `${tables.length} tables`} ·{" "}
           <span className="font-mono">
             {idx + 1}/{DRILL_LEN}
           </span>
