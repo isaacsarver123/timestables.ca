@@ -1038,16 +1038,15 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
       : "left-1/2 -translate-x-1/2 top-full"; // center-below
 
   return (
-    // The wrapping <div> uses padding to extend the hover hit-area BEYOND the
-    // node so the cursor has a generous corridor to reach the popover without
-    // tripping onMouseLeave. Padding ≈ popover side gap.
+    // The wrapping <div> hugs only the circle. Hover detection happens on
+    // the circle itself, not a wide padding area — so adjacent lessons aren't
+    // triggered when the cursor is anywhere near them.
     <div
       className={`relative ${open ? "z-50" : "z-10"}`}
-      style={{ padding: "16px 32px" }}
-      onMouseEnter={openNow}
       onMouseLeave={scheduleClose}
     >
       <button
+        onMouseEnter={openNow}
         onClick={(e) => {
           e.stopPropagation();
           cancelClose();
@@ -1102,8 +1101,12 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.95 }}
             transition={{ duration: 0.14 }}
-            onMouseEnter={cancelClose}
-            onMouseLeave={scheduleClose}
+            // Popover-as-sibling-of-the-button: own its hover state so the
+            // cursor can dwell here without re-triggering close. stopPropagation
+            // on enter prevents the popover from "leaking" hover events to any
+            // visually-underlying lesson node when popovers overlap.
+            onMouseEnter={(e) => { e.stopPropagation(); cancelClose(); }}
+            onMouseLeave={(e) => { e.stopPropagation(); scheduleClose(); }}
             className={`absolute ${popoverPositioning} z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto p-3`}
             data-testid={`lesson-path-popover-${lesson.id}`}
             role="dialog"
@@ -1120,12 +1123,12 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
               {done
                 ? "You've cleared this one. Hit Practice to run it again — XP only, no progress changes."
                 : unlocked
-                ? "Click the node to start. Or jump here — calibrated test (20 Q · 5 hearts) marks this lesson and everything before it complete."
-                : "Locked. Jump here passes if you nail the calibrated test (20 Q · 5 hearts)."}
+                ? "Click Start to begin this lesson."
+                : "Locked. Pass a calibrated test (20 Q · 5 hearts) to jump here and mark every previous lesson complete."}
             </div>
             <div className="flex gap-2">
               {done ? (
-                // Completed lesson → only "Practice" (re-run, no jump-test).
+                // Completed lesson → "Practice" only.
                 <button
                   onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
                   data-testid={`lesson-path-practice-${lesson.id}`}
@@ -1134,25 +1137,17 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sid
                   Practice
                 </button>
               ) : unlocked ? (
-                // Next-up unlocked lesson → "Start" + "Jump here".
-                <>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
-                    data-testid={`lesson-path-start-${lesson.id}`}
-                    className="flex-1 brut-border brut-shadow-sm bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-                  >
-                    Start
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onJump(); setOpen(false); }}
-                    data-testid={`lesson-path-jump-${lesson.id}`}
-                    className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-                  >
-                    Jump here
-                  </button>
-                </>
+                // Next-up unlocked lesson → "Start" only (no Jump, since the
+                // user's already at the right spot).
+                <button
+                  onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
+                  data-testid={`lesson-path-start-${lesson.id}`}
+                  className="flex-1 brut-border brut-shadow-sm bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+                >
+                  Start
+                </button>
               ) : (
-                // Locked / further ahead → only "Jump here" (full-width).
+                // Locked / further ahead → "Jump here" only.
                 <button
                   onClick={(e) => { e.stopPropagation(); onJump(); setOpen(false); }}
                   data-testid={`lesson-path-jump-${lesson.id}`}

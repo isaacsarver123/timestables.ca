@@ -59,46 +59,63 @@ const Home = () => {
           {cms.announcement}
         </div>
       )}
-      {/* Hero with streak pill snugged up against the title (no full-width gap). */}
+      {/* Hero */}
       <section>
         <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
           Times Tables
         </div>
-        <div className="flex flex-wrap items-center gap-6 md:gap-10 mt-1">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg" data-testid="hero-title">
-            {cms?.hero_title || "Practice multiplication and division."}
-          </h1>
-          {(() => {
-            const streak = state.dailyStreak?.count || 0;
-            const lit = streak > 0;
-            return (
-              <div
-                data-testid="home-streak"
-                className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-2.5 py-1.5 flex items-center gap-2 rounded-md shrink-0`}
-                style={{ marginLeft: "clamp(2rem, 12vw, 9rem)" }}
-              >
-                <motion.div
-                  animate={lit ? { scale: [1, 1.12, 1], rotate: [0, -6, 6, 0] } : { scale: 1 }}
-                  transition={lit ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" } : { duration: 0 }}
-                  className={`w-7 h-7 brut-border grid place-items-center ${lit ? "bg-rose-500 text-white" : "surface text-muted"}`}
-                >
-                  <Flame size={13} strokeWidth={2.5} fill={lit ? "currentColor" : "none"} />
-                </motion.div>
-                <div className="leading-tight">
-                  <div className={`text-[9px] uppercase tracking-[0.2em] font-bold ${lit ? "text-zinc-900" : "text-muted"}`}>
-                    Streak
-                  </div>
-                  <div className="font-mono font-black text-base tabular-nums" data-testid="home-streak-count">
-                    {streak}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg mt-1" data-testid="hero-title">
+          {cms?.hero_title || "Practice multiplication and division."}
+        </h1>
         <p className="text-muted text-sm mt-2 max-w-xl" data-testid="hero-subtitle">
           {cms?.hero_subtitle || "Pick the tables you want, choose a mode, and go. Progress saves across your devices."}
         </p>
+        {/* Streak pill — chunky, distinctive ribbon. Lit when active, dim when
+            no streak. Positioned just under the subtitle so it has room to
+            breathe and reads as a clear "today's status" call-out. */}
+        {(() => {
+          const streak = state.dailyStreak?.count || 0;
+          const lit = streak > 0;
+          return (
+            <div className="mt-4" data-testid="home-streak">
+              <div
+                className={`inline-flex items-stretch brut-border brut-shadow-sm rounded-md overflow-hidden ${
+                  lit ? "" : "opacity-90"
+                }`}
+              >
+                {/* Flame box */}
+                <div className={`grid place-items-center px-3 ${lit ? "bg-rose-500 text-white" : "surface-2 text-muted"}`}>
+                  <motion.div
+                    animate={lit ? { y: [0, -2, 0], rotate: [-3, 3, -3] } : { y: 0, rotate: 0 }}
+                    transition={lit ? { duration: 1.8, repeat: Infinity, ease: "easeInOut" } : { duration: 0 }}
+                  >
+                    <Flame size={18} strokeWidth={2.5} fill={lit ? "currentColor" : "none"} />
+                  </motion.div>
+                </div>
+                {/* Count + label */}
+                <div className={`px-4 py-2 flex items-center gap-3 ${lit ? "bg-amber-300 text-zinc-950" : "surface text-fg"}`}>
+                  <div className="font-mono font-black text-2xl tabular-nums leading-none" data-testid="home-streak-count">
+                    {streak}
+                  </div>
+                  <div className="leading-tight">
+                    <div className={`text-[9px] uppercase tracking-[0.25em] font-bold ${lit ? "text-zinc-900" : "text-muted"}`}>
+                      Day{streak === 1 ? "" : "s"}
+                    </div>
+                    <div className={`text-[11px] font-semibold ${lit ? "text-zinc-900" : "text-muted"}`}>
+                      {lit
+                        ? streak >= 25
+                          ? "On fire."
+                          : streak >= 7
+                          ? "Keep it going."
+                          : "Streak active"
+                        : "Finish anything today to start one"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       {/* Modes */}
