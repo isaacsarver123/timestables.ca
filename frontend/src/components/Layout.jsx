@@ -11,6 +11,8 @@ import {
   VolumeX,
   Sun,
   Moon,
+  Settings as SettingsIcon,
+  Flame,
 } from "lucide-react";
 import {
   getState,
@@ -38,6 +40,7 @@ export const Layout = ({ children }) => {
     { to: "/play/daily", label: "Daily", icon: CalendarCheck, testid: "nav-daily" },
     { to: "/stats", label: "Stats", icon: BarChart3, testid: "nav-stats" },
     { to: "/shop", label: "Shop", icon: Store, testid: "nav-shop" },
+    { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "nav-settings" },
   ];
 
   const toggleSound = () => {
@@ -88,6 +91,18 @@ export const Layout = ({ children }) => {
           </nav>
 
           <div className="flex items-center gap-1.5">
+            {state.dailyStreak?.count > 0 && (
+              <div
+                className="flex items-center gap-1 px-2 py-1.5 brut-border bg-amber-300 text-zinc-950"
+                data-testid="hud-streak"
+                title={`${state.dailyStreak.count}-day Daily streak`}
+              >
+                <Flame size={13} />
+                <span className="font-mono text-xs font-bold tabular-nums">
+                  {state.dailyStreak.count}
+                </span>
+              </div>
+            )}
             <button
               onClick={toggleTheme}
               data-testid="toggle-theme"

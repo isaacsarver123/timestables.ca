@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 6 frontend-only testing of the big batch (chart, Settings page, daily streak, decimals long-mul, step-by-step long-mul, remainder long-div, step-difficulty for long-div). 14/16 explicit checks passed. ONE CRITICAL BUG: Step-by-Step Long Multiplication is not wired into the play view — `StepMultiplication` is imported but never rendered, so picking `diff-step` falls through to the default <Question> component which shows an empty ' = ?' prompt. All other features (Stats AreaChart with empty + seeded states, Settings page sections + theme/sound toggles, reset-preferences/reset-stats/reset-all semantics, export, daily streak math (yesterday+1=>+1, hud-streak), 5 long-mul difficulties, decimal × integer prompts (e.g. 2.4 × 6) with '.' accepted in answer-input, 9 long-div level buttons, remainder mode q+r inputs, step-by-step long-div sub-difficulty) work as specified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LongMul (/play/long-mul) Step-by-Step", "issue": "StepMultiplication is imported in LongMul.jsx but never rendered. Choosing diff-step transitions to phase=play and generates a step-multiplication problem object (a, b, partials, total, key) but the JSX always renders <Question question={question} />, which expects `prompt` and `answer` fields. Result: the play card shows an empty '= ?' input with no working partial inputs; data-testid=\"step-multiplication\" / mul-step-prompt / mul-partial-input-0 / mul-total-input / mul-step-submit / mul-step-done are all absent from the DOM.", "selector": "[data-testid=\"diff-step\"] -> expects [data-testid=\"step-multiplication\"]", "priority": "CRITICAL"},
+      {"component": "LongMul HUD", "issue": "HUD shows '{idx+1}/{ROUND_LEN}' (hardcoded 8) regardless of difficulty. For diff-step it should use STEP_ROUND_LEN (4). The result page uses `totalLen` correctly, so the HUD is inconsistent with the result screen — user sees 1/8 during play, then result lands on result phase after 4 problems and shows '/4'.", "selector": ".surface.brut-border.p-3.mb-4 .font-mono in LongMul.jsx ~line 161", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Long-Mul step difficulty", "issue": "Because StepMultiplication is never mounted, the entire iteration-6 step-by-step long multiplication feature is non-functional from the UI. Submitting in the broken Question card cannot be a no-op vs correct because parseFloat('') short-circuits, but pressing Enter with any number yields wrong (answer is undefined) and would still call recordAnswer with NaN comparison.", "affected_selectors": ["step-multiplication","mul-step-prompt","mul-partial-input-0","mul-total-input","mul-step-submit","mul-step-done"]}
+    ],
+    "design_issues": [
+      {"screen": "Stats /stats progress chart", "issues": ["Recharts ResponsiveContainer logs warning 'width(-1) and height(-1) of chart should be greater than 0' on first render (empty-history branch hides chart, but cached SVG is still mounted briefly). Cosmetic only."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "FIX (P0): In /app/frontend/src/pages/LongMul.jsx, render <StepMultiplication problem={question} onComplete={...} onWrong={...} /> when difficulty === 'step' (mirror LongDiv.jsx's StepDivision branch with a step-next button). Also wire onComplete to addCoinsAndXp + setCorrect, and onWrong to recordAnswer({correct:false}).",
+    "FIX (P1): In LongMul.jsx HUD line that says `{idx + 1}/{ROUND_LEN}`, replace ROUND_LEN with totalLen so step mode shows X/4."
+  ],
+  "critical_code_review_comments": [
+    "LongMul.jsx imports StepMultiplication on line 6 but never references it in JSX — dead import indicates the wiring was forgotten.",
+    "LongMul.jsx submit() uses parseFloat with 0.0001 tolerance for ALL difficulties (good for decimals), but for step difficulty `question.answer` is undefined (StepMul problem object has no `answer` field), so submitting in the broken render path will compute NaN and treat as wrong every time, calling recordAnswer with corrupt state.",
+    "Stats.jsx renders the recharts SVG inside a fixed-height div only when hasHistory is true; the warning about width(-1)/height(-1) suggests an initial render where ResponsiveContainer measures before the parent has size. Wrapping in a useEffect-guarded mount or specifying an explicit width could remove the noise.",
+    "storage.setDailyResult uses yesterdayStr() which is timezone-dependent (toISOString uses UTC). For users near a date boundary in non-UTC timezones, this could undercount/overcount streaks. Same concern in todayStr() across the codebase."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "87.5% (14/16 checks; 1 critical wiring bug, 1 medium HUD bug)"},
+  "test_credentials": "none required",
+  "seed_data_creation": "Used localStorage.setItem('tt_arena_state_v2', ...) to seed history (today: {correct:5,wrong:2}), dailyStreak ({count:5,lastDate:yesterday}), coins/xp/totalCorrect for reset-preferences vs reset-stats verification. Cleared with reset-all between scenarios.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 6 needs a re-test after main agent fixes the LongMul step-by-step wiring. Specifically verify: (1) clicking diff-step renders [data-testid=step-multiplication] with mul-step-prompt and mul-partial-input-0; (2) entering wrong partial keeps current step; (3) entering correct partial advances; (4) when partials.length>1, after all partials a mul-total-input appears; (5) correct total shows mul-step-done; (6) HUD shows X/4 not X/8; (7) step-next or auto-next advances within the 4-problem round. All other iteration-6 features (Stats chart, Settings, daily streak, decimals long-mul, remainder div, step-difficulty long-div, nav-settings) PASSED in this run."
+}

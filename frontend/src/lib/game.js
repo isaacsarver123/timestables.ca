@@ -300,6 +300,103 @@ export function generateStepDivision(opts = {}) {
   return { ...info, key: "sd_13032/24_f" };
 }
 
+// Generate a long-division problem with a non-zero remainder.
+export function generateRemainderDiv(opts = {}) {
+  const { rng = Math.random, lastKey, difficulty = "medium" } = opts;
+  for (let i = 0; i < 30; i++) {
+    let divisor, quotient;
+    if (difficulty === "easy") {
+      divisor = Math.floor(rng() * 6) + 3; // 3-8
+      quotient = Math.floor(rng() * 9) + 5; // 5-13
+    } else if (difficulty === "hard") {
+      divisor = Math.floor(rng() * 18) + 7; // 7-24
+      quotient = Math.floor(rng() * 60) + 11; // 11-70
+    } else {
+      divisor = Math.floor(rng() * 11) + 4; // 4-14
+      quotient = Math.floor(rng() * 30) + 10; // 10-39
+    }
+    const remainder = Math.floor(rng() * (divisor - 1)) + 1; // 1..divisor-1
+    const dividend = divisor * quotient + remainder;
+    const key = `rd_${dividend}/${divisor}`;
+    if (key === lastKey) continue;
+    return {
+      a: dividend,
+      b: divisor,
+      op: "÷r",
+      prompt: `${dividend} ÷ ${divisor}`,
+      answer: { quotient, remainder },
+      key,
+    };
+  }
+  return {
+    a: 25,
+    b: 4,
+    op: "÷r",
+    prompt: "25 ÷ 4",
+    answer: { quotient: 6, remainder: 1 },
+    key: "rd_25/4_f",
+  };
+}
+
+// Decimal multiplication. One factor is a small decimal, other is a small integer.
+const DECIMALS = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.2, 1.5, 1.8, 2.4, 2.5];
+export function generateDecimalMul(opts = {}) {
+  const { rng = Math.random, lastKey } = opts;
+  for (let i = 0; i < 30; i++) {
+    const a = DECIMALS[Math.floor(rng() * DECIMALS.length)];
+    const b = Math.floor(rng() * 10) + 2; // 2-11
+    const product = Math.round(a * b * 100) / 100;
+    const key = `dm_${a}x${b}`;
+    if (key === lastKey) continue;
+    return {
+      a,
+      b,
+      op: "×",
+      prompt: `${a} × ${b}`,
+      answer: product,
+      key,
+      decimal: true,
+    };
+  }
+  return { a: 1.5, b: 4, op: "×", prompt: "1.5 × 4", answer: 6, key: "dm_1.5x4_f", decimal: true };
+}
+
+// Long multiplication algorithm: each digit of `b` (from ones) creates a partial.
+// Returns { a, b, partials: [{ digit, smallProduct, shifted, offset }], total, key }
+export function longMultiplicationSteps(a, b) {
+  const bDigits = String(b).split("").map(Number).reverse(); // ones first
+  const partials = bDigits.map((digit, offset) => {
+    const smallProduct = a * digit;
+    const shifted = smallProduct * Math.pow(10, offset);
+    return { digit, smallProduct, shifted, offset };
+  });
+  return { a, b, partials, total: a * b };
+}
+
+export function generateStepMultiplication(opts = {}) {
+  const { rng = Math.random, lastKey, difficulty = "medium" } = opts;
+  for (let i = 0; i < 30; i++) {
+    let a, b;
+    if (difficulty === "easy") {
+      // 2-digit × 1-digit (single partial, easier intro)
+      a = Math.floor(rng() * 80) + 12; // 12-91
+      b = Math.floor(rng() * 8) + 2; // 2-9
+    } else if (difficulty === "hard") {
+      // 3-digit × 2-digit
+      a = Math.floor(rng() * 800) + 100;
+      b = Math.floor(rng() * 80) + 12;
+    } else {
+      // 2-digit × 2-digit
+      a = Math.floor(rng() * 80) + 12;
+      b = Math.floor(rng() * 80) + 12;
+    }
+    const key = `sm_${a}x${b}`;
+    if (key === lastKey) continue;
+    return { ...longMultiplicationSteps(a, b), key };
+  }
+  return { ...longMultiplicationSteps(23, 47), key: "sm_23x47_f" };
+}
+
 // Tips per table for Learn mode
 export function tableTips(n) {
   const tips = {

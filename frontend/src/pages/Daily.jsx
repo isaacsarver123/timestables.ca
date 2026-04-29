@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, CalendarCheck, X } from "lucide-react";
+import { ArrowLeft, CalendarCheck, X, Flame } from "lucide-react";
 import Question from "@/components/Question";
 import {
   getState,
@@ -90,6 +90,17 @@ const Daily = () => {
             Daily Challenge
           </h1>
           <p className="text-sm text-muted mt-1">{PRETTY_DATE()}</p>
+          {state.dailyStreak?.count > 0 && (
+            <div
+              className="mt-2 inline-flex items-center gap-1.5 brut-border bg-amber-300 text-zinc-950 px-2.5 py-1"
+              data-testid="daily-streak"
+            >
+              <Flame size={14} />
+              <span className="font-mono text-sm font-bold">
+                {state.dailyStreak.count}-day streak
+              </span>
+            </div>
+          )}
         </div>
         <Link
           to="/"

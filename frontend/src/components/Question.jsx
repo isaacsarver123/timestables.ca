@@ -62,7 +62,7 @@ export const Question = forwardRef(function Question(
           type="number"
           inputMode="numeric"
           value={value}
-          onChange={(e) => onChange(e.target.value.replace(/[^0-9-]/g, ""))}
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9.-]/g, ""))}
           onKeyDown={handleKey}
           disabled={disabled}
           placeholder="?"

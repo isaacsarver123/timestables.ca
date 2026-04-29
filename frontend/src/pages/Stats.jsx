@@ -1,9 +1,29 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, RotateCcw } from "lucide-react";
+import { ArrowLeft, RotateCcw, TrendingUp } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import { getState, subscribe, resetAll, progressToNextLevel } from "@/lib/storage";
 
 const TABLES = Array.from({ length: 20 }, (_, i) => i + 1);
+
+function lastNDays(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const day = new Date(d);
+    day.setDate(d.getDate() - i);
+    out.push(day.toISOString().slice(0, 10));
+  }
+  return out;
+}
 
 const Stats = () => {
   const [state, setState] = useState(getState());
@@ -18,6 +38,19 @@ const Stats = () => {
       resetAll();
     }
   };
+
+  const days = lastNDays(30);
+  const chartData = days.map((d) => {
+    const h = state.history?.[d] || { correct: 0, wrong: 0 };
+    const total = h.correct + h.wrong;
+    return {
+      date: d.slice(5), // MM-DD
+      correct: h.correct,
+      total,
+      accuracy: total ? Math.round((h.correct / total) * 100) : 0,
+    };
+  });
+  const hasHistory = chartData.some((c) => c.total > 0);
 
   return (
     <div className="space-y-7" data-testid="stats-page">
@@ -46,6 +79,82 @@ const Stats = () => {
         <StatCard label="Level" value={level} accent="bg-blue-600 text-white" />
         <StatCard label="Best Streak" value={`x${state.bestStreak}`} />
         <StatCard label="Boss Level" value={state.bossLevel} accent="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950" />
+      </div>
+
+      {/* Progress chart */}
+      <div className="surface brut-border p-5" data-testid="progress-chart">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-muted font-medium flex items-center gap-1.5">
+              <TrendingUp size={12} /> Progress
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-fg">Last 30 days</h2>
+          </div>
+        </div>
+        {hasHistory ? (
+          <div style={{ width: "100%", height: 220 }}>
+            <ResponsiveContainer>
+              <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="g-correct" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--app-line-soft)" />
+                <XAxis
+                  dataKey="date"
+                  fontSize={10}
+                  tick={{ fill: "var(--app-muted)", fontFamily: "JetBrains Mono" }}
+                  stroke="var(--app-line-soft)"
+                />
+                <YAxis
+                  fontSize={10}
+                  tick={{ fill: "var(--app-muted)", fontFamily: "JetBrains Mono" }}
+                  stroke="var(--app-line-soft)"
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--app-surface)",
+                    border: "2px solid var(--app-line)",
+                    borderRadius: 0,
+                    fontFamily: "Outfit",
+                    color: "var(--app-fg)",
+                  }}
+                  labelStyle={{ color: "var(--app-fg)", fontWeight: 700 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  name="Questions"
+                  stroke="#52525b"
+                  strokeWidth={1.5}
+                  fill="transparent"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="correct"
+                  name="Correct"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  fill="url(#g-correct)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-muted text-sm">
+            No history yet — play a round to start tracking.
+          </div>
+        )}
+        <div className="flex items-center gap-4 text-xs text-muted mt-2 font-mono">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 bg-blue-600" /> Correct
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-1 bg-zinc-500" /> Total questions
+          </span>
+        </div>
       </div>
 
       <div className="surface brut-border p-5">

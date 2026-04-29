@@ -15,6 +15,8 @@ const DEFAULT_STATE = {
   soundOn: true,
   theme: "light", // 'light' | 'dark'
   daily: { date: null, score: 0, total: 0, completed: false },
+  dailyStreak: { count: 0, lastDate: null },
+  history: {}, // { 'YYYY-MM-DD': { correct: number, wrong: number } }
   powerups: { extraTime: 0, skip: 0, freeze: 0, doubler: 0 },
   stats: {},
   totalCorrect: 0,
@@ -53,6 +55,8 @@ export function getState() {
     powerups: { ...DEFAULT_STATE.powerups, ...(raw.powerups || {}) },
     stats: { ...(raw.stats || {}) },
     daily: { ...DEFAULT_STATE.daily, ...(raw.daily || {}) },
+    dailyStreak: { ...DEFAULT_STATE.dailyStreak, ...(raw.dailyStreak || {}) },
+    history: { ...(raw.history || {}) },
     selectedTables:
       raw.selectedTables && raw.selectedTables.length
         ? raw.selectedTables
@@ -97,11 +101,22 @@ export function progressToNextLevel(xp) {
   return { level: lvl, current: xp - cur, needed: next - cur, pct };
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function yesterdayStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Bucket stats by the "table" being practised. For division, the divisor is the table.
 export function recordAnswer({ a, b, op, correct, ms }) {
   const tableKey = op === "÷" ? String(b) : String(Math.max(a, b));
+  const today = todayStr();
   updateState((s) => {
     const cur = s.stats[tableKey] || { correct: 0, wrong: 0, totalMs: 0 };
+    const histCur = s.history[today] || { correct: 0, wrong: 0 };
     return {
       ...s,
       stats: {
@@ -110,6 +125,13 @@ export function recordAnswer({ a, b, op, correct, ms }) {
           correct: cur.correct + (correct ? 1 : 0),
           wrong: cur.wrong + (correct ? 0 : 1),
           totalMs: cur.totalMs + (ms || 0),
+        },
+      },
+      history: {
+        ...s.history,
+        [today]: {
+          correct: histCur.correct + (correct ? 1 : 0),
+          wrong: histCur.wrong + (correct ? 0 : 1),
         },
       },
       totalCorrect: s.totalCorrect + (correct ? 1 : 0),
@@ -184,9 +206,51 @@ export function bumpBossLevel() {
 }
 
 export function setDailyResult({ date, score, total }) {
+  updateState((s) => {
+    const prev = s.dailyStreak || { count: 0, lastDate: null };
+    let count = prev.count;
+    if (prev.lastDate === date) {
+      // already counted today; no change
+    } else if (prev.lastDate === yesterdayStr()) {
+      count = (prev.count || 0) + 1;
+    } else {
+      count = 1;
+    }
+    return {
+      ...s,
+      daily: { date, score, total, completed: true },
+      dailyStreak: { count, lastDate: date },
+    };
+  });
+}
+
+export function resetPreferences() {
   updateState((s) => ({
     ...s,
-    daily: { date, score, total, completed: true },
+    selectedTables: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    opMode: "mul",
+    inputMode: "type",
+    soundOn: true,
+    theme: "light",
+  }));
+}
+
+export function resetStats() {
+  updateState((s) => ({
+    ...s,
+    coins: 0,
+    xp: 0,
+    bestStreak: 0,
+    bestQuickFire: 0,
+    bossLevel: 1,
+    bossLevelsCleared: 0,
+    powerups: { extraTime: 0, skip: 0, freeze: 0, doubler: 0 },
+    stats: {},
+    totalCorrect: 0,
+    totalWrong: 0,
+    history: {},
+    daily: { date: null, score: 0, total: 0, completed: false },
+    dailyStreak: { count: 0, lastDate: null },
   }));
 }
 

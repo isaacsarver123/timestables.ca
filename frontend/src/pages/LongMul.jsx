@@ -1,17 +1,21 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, X, Grid3x3 } from "lucide-react";
+import { ArrowLeft, X, Grid3x3, ArrowRight } from "lucide-react";
 import Question from "@/components/Question";
+import StepMultiplication from "@/components/StepMultiplication";
 import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
-import { generateLongMul } from "@/lib/game";
+import { generateLongMul, generateDecimalMul, generateStepMultiplication } from "@/lib/game";
 import { sfx } from "@/lib/sound";
 
 const ROUND_LEN = 8;
+const STEP_ROUND_LEN = 4;
 const DIFFS = [
   { key: "easy", label: "Easy", sub: "2-digit × 1-digit" },
   { key: "medium", label: "Medium", sub: "2-digit × 2-digit" },
   { key: "hard", label: "Hard", sub: "3-digit × 2-digit" },
+  { key: "decimals", label: "Decimals", sub: "Decimal × integer (e.g. 1.5 × 8)", decimal: true },
+  { key: "step", label: "Step-by-Step", sub: "Solve like on paper, partial by partial", step: true },
 ];
 
 const LongMul = () => {
@@ -30,7 +34,13 @@ const LongMul = () => {
     setDifficulty(diff);
     setIdx(0);
     setCorrect(0);
-    setQuestion(generateLongMul({ difficulty: diff }));
+    if (diff === "step") {
+      setQuestion(generateStepMultiplication({ difficulty: "medium" }));
+    } else if (diff === "decimals") {
+      setQuestion(generateDecimalMul());
+    } else {
+      setQuestion(generateLongMul({ difficulty: diff }));
+    }
     setValue("");
     setStatus("idle");
     setShowHint(false);
@@ -38,13 +48,24 @@ const LongMul = () => {
     startTs.current = performance.now();
   };
 
+  const isStep = difficulty === "step";
+  const totalLen = isStep ? STEP_ROUND_LEN : ROUND_LEN;
+
   const next = () => {
-    if (idx + 1 >= ROUND_LEN) {
+    if (idx + 1 >= totalLen) {
       setPhase("result");
       return;
     }
     setIdx((i) => i + 1);
-    setQuestion((q) => generateLongMul({ difficulty, lastKey: q?.key }));
+    if (isStep) {
+      setQuestion((q) =>
+        generateStepMultiplication({ difficulty: "medium", lastKey: q?.key })
+      );
+    } else if (difficulty === "decimals") {
+      setQuestion((q) => generateDecimalMul({ lastKey: q?.key }));
+    } else {
+      setQuestion((q) => generateLongMul({ difficulty, lastKey: q?.key }));
+    }
     setValue("");
     setStatus("idle");
     setShowHint(false);
@@ -55,10 +76,18 @@ const LongMul = () => {
     if (status !== "idle" || !question) return;
     if (value === "" || value === "-") return;
     const ms = Math.round(performance.now() - startTs.current);
-    const ok = parseInt(value, 10) === question.answer;
+    const guess = parseFloat(value);
+    const ok = Math.abs(guess - question.answer) < 0.0001;
     recordAnswer({ a: question.a, b: question.b, op: question.op, correct: ok, ms });
     if (ok) {
-      const reward = difficulty === "easy" ? 3 : difficulty === "medium" ? 5 : 8;
+      const reward =
+        difficulty === "easy"
+          ? 3
+          : difficulty === "medium"
+          ? 5
+          : difficulty === "decimals"
+          ? 6
+          : 8;
       addCoinsAndXp(reward, 8);
       sfx.correct();
       sfx.coin();
@@ -160,7 +189,7 @@ const LongMul = () => {
             Round complete
           </div>
           <h2 className="text-4xl sm:text-5xl font-black tracking-tighter mt-1 text-fg">
-            {correct}<span className="text-muted">/{ROUND_LEN}</span>
+            {correct}<span className="text-muted">/{totalLen}</span>
           </h2>
           <div className="mt-6 flex flex-wrap justify-center gap-2.5">
             <button
