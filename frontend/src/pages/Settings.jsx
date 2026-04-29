@@ -9,7 +9,6 @@ import {
   VolumeX,
   RotateCcw,
   AlertTriangle,
-  Download,
   Upload,
   CreditCard,
   LogIn,
@@ -17,6 +16,10 @@ import {
   CheckCircle2,
   Clock3,
   ExternalLink,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import {
   getState,
@@ -36,6 +39,10 @@ const Settings = () => {
   useEffect(() => subscribe(() => setState(getState())), []);
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const [cms, setCms] = useState(null);
+  useEffect(() => {
+    api.get("/cms/public").then((r) => setCms(r.data)).catch(() => {});
+  }, []);
 
   const toggleSound = () => {
     const next = !state.soundOn;
@@ -49,20 +56,6 @@ const Settings = () => {
       fn();
       toast.success(success);
     }
-  };
-
-  const exportData = () => {
-    const data = JSON.stringify(getState(), null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `times-tables-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Exported");
   };
 
   const importData = (e) => {
@@ -207,42 +200,63 @@ const Settings = () => {
         </Row>
       </section>
 
-      {/* Data */}
-      <section className="surface brut-border p-5 space-y-3" data-testid="settings-data">
-        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Data</h2>
+      {/* Need help? */}
+      <section className="surface brut-border p-5 space-y-3" data-testid="settings-help">
+        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Need help?</h2>
+        <p className="text-xs text-muted">
+          Stuck on something or want to send feedback? Reach out — we usually reply within a day.
+        </p>
         <div className="grid sm:grid-cols-2 gap-2.5">
-          <button
-            onClick={exportData}
-            data-testid="settings-export"
+          <a
+            href={`mailto:${cms?.support_email || "isaacsarver@icloud.com"}`}
+            data-testid="settings-help-email"
             className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3"
           >
             <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
-              <Download size={16} />
+              <Mail size={16} />
             </div>
-            <div>
-              <div className="font-bold text-sm">Export</div>
-              <div className="text-xs text-muted">Download your save as a JSON file</div>
+            <div className="min-w-0">
+              <div className="font-bold text-sm">Email</div>
+              <div className="text-xs text-muted truncate">{cms?.support_email || "isaacsarver@icloud.com"}</div>
             </div>
-          </button>
-          <label
-            className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3 cursor-pointer"
-            data-testid="settings-import"
+          </a>
+          <a
+            href={`tel:${(cms?.support_phone || "8259623425").replace(/[^0-9+]/g, "")}`}
+            data-testid="settings-help-phone"
+            className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3"
           >
             <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
-              <Upload size={16} />
+              <Phone size={16} />
             </div>
-            <div>
-              <div className="font-bold text-sm">Import</div>
-              <div className="text-xs text-muted">Replace state from a JSON file</div>
+            <div className="min-w-0">
+              <div className="font-bold text-sm">Phone</div>
+              <div className="text-xs text-muted truncate">{cms?.support_phone || "825-962-3425"}</div>
             </div>
-            <input
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={importData}
-            />
-          </label>
+          </a>
         </div>
+      </section>
+
+      {/* Data — Import only (export removed) */}
+      <section className="surface brut-border p-5 space-y-3" data-testid="settings-data">
+        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Data</h2>
+        <label
+          className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3 cursor-pointer"
+          data-testid="settings-import"
+        >
+          <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
+            <Upload size={16} />
+          </div>
+          <div>
+            <div className="font-bold text-sm">Import save file</div>
+            <div className="text-xs text-muted">Replace state from a JSON file</div>
+          </div>
+          <input
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={importData}
+          />
+        </label>
       </section>
 
       {/* Reset */}
@@ -301,6 +315,25 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
     try { return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
     catch { return iso; }
   };
+
+  // Admin: infinite free use, no billing actions
+  if (user.is_admin) {
+    return (
+      <div className="space-y-3" data-testid="billing-admin">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={16} className="text-amber-500" />
+          <span className="font-bold text-fg text-sm">Admin account</span>
+        </div>
+        <div className="brut-border-soft surface-2 p-4 flex items-center gap-3">
+          <InfinityIcon size={28} className="text-fg" />
+          <div>
+            <div className="font-bold text-fg" data-testid="billing-admin-label">Infinite free use</div>
+            <div className="text-xs text-muted">No billing — admins use the site as a paying customer.</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (active && (sub.last4 || sub.current_period_end)) {
     return (

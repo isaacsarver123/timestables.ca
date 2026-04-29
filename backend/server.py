@@ -184,6 +184,23 @@ class CMSIn(BaseModel):
     paywall_blurb: Optional[str] = None
     announcement: Optional[str] = None
     announcement_active: Optional[bool] = None
+    support_email: Optional[str] = None
+    support_phone: Optional[str] = None
+    footer_text: Optional[str] = None
+    signup_welcome_title: Optional[str] = None
+    signup_welcome_body: Optional[str] = None
+    signup_pitch_a_title: Optional[str] = None
+    signup_pitch_a_body: Optional[str] = None
+    signup_pitch_b_title: Optional[str] = None
+    signup_pitch_b_body: Optional[str] = None
+    login_welcome_title: Optional[str] = None
+    login_welcome_body: Optional[str] = None
+
+
+class UserEditIn(BaseModel):
+    email: Optional[EmailStr] = None
+    name: Optional[str] = None
+    role: Optional[str] = None  # "user" | "admin"
 
 
 # ------------------------------------------------------------------ APP
@@ -220,16 +237,31 @@ async def on_startup():
         await db.users.update_one({"email": ADMIN_EMAIL}, {"$set": upd})
     # Default CMS doc
     cms = await db.cms.find_one({"_id": "site"})
+    cms_defaults = {
+        "hero_title": "Practice multiplication and division.",
+        "hero_subtitle": "Pick the tables you want, choose a mode, and go. Progress syncs across your devices.",
+        "paywall_blurb": "Our service is just $5 CAD/month — that's what keeps the servers humming and the devs building.",
+        "announcement": "",
+        "announcement_active": False,
+        "support_email": "isaacsarver@icloud.com",
+        "support_phone": "825-962-3425",
+        "footer_text": "timestables.ca · v3",
+        "signup_welcome_title": "Welcome.",
+        "signup_welcome_body": "2-day free trial, no card required. After that it's $5 CAD/month — cancel anytime, no funny business.",
+        "signup_pitch_a_title": "No $99/mo nonsense.",
+        "signup_pitch_a_body": "Other sites charge ridiculous fees for the same thing. We charge $5 — flat. That keeps the servers on and the developers fed. That's it.",
+        "signup_pitch_b_title": "No card during the trial.",
+        "signup_pitch_b_body": "You only put a card in if you decide to keep going after 2 days. We'll never charge you by surprise.",
+        "login_welcome_title": "Welcome back.",
+        "login_welcome_body": "Pick up where you left off. Your progress syncs across every device you sign in on.",
+    }
     if not cms:
-        await db.cms.insert_one({
-            "_id": "site",
-            "hero_title": "Master your times tables.",
-            "hero_subtitle": "Gamified practice for teens and adults — no kid stuff.",
-            "paywall_blurb": "Our service is just $5 CAD/month — that's what keeps the servers humming and the devs building.",
-            "announcement": "",
-            "announcement_active": False,
-            "updated_at": now.isoformat(),
-        })
+        await db.cms.insert_one({"_id": "site", **cms_defaults, "updated_at": now.isoformat()})
+    else:
+        # backfill any missing default fields
+        missing = {k: v for k, v in cms_defaults.items() if k not in cms}
+        if missing:
+            await db.cms.update_one({"_id": "site"}, {"$set": missing})
 
 
 @app.on_event("shutdown")
@@ -247,13 +279,9 @@ async def root():
 @api.get("/cms/public")
 async def cms_public():
     doc = await db.cms.find_one({"_id": "site"}) or {}
-    return {
-        "hero_title": doc.get("hero_title", ""),
-        "hero_subtitle": doc.get("hero_subtitle", ""),
-        "paywall_blurb": doc.get("paywall_blurb", ""),
-        "announcement": doc.get("announcement", ""),
-        "announcement_active": doc.get("announcement_active", False),
-    }
+    doc.pop("_id", None)
+    doc.pop("updated_at", None)
+    return doc
 
 
 # -------------------------------------------------------- AUTH
@@ -617,6 +645,39 @@ async def admin_users(_: dict = Depends(get_admin_user), q: str = "", limit: int
     async for u in cur:
         out.append(serialize_user(u))
     return {"users": out}
+
+
+@api.put("/admin/users/{user_id}")
+async def admin_users_edit(user_id: str, body: UserEditIn, admin: dict = Depends(get_admin_user)):
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    target = await db.users.find_one({"_id": oid})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    upd = {}
+    if body.email is not None:
+        new_email = body.email.lower().strip()
+        if new_email != target["email"]:
+            clash = await db.users.find_one({"email": new_email, "_id": {"$ne": oid}})
+            if clash:
+                raise HTTPException(status_code=400, detail="That email is already in use.")
+            upd["email"] = new_email
+    if body.name is not None:
+        upd["name"] = body.name.strip()
+    if body.role is not None:
+        if body.role not in ("user", "admin"):
+            raise HTTPException(status_code=400, detail="Role must be 'user' or 'admin'")
+        # block demoting yourself
+        if body.role == "user" and str(target["_id"]) == str(admin["_id"]):
+            raise HTTPException(status_code=400, detail="Can't demote yourself.")
+        upd["role"] = body.role
+    if not upd:
+        return serialize_user(target)
+    await db.users.update_one({"_id": oid}, {"$set": upd})
+    refreshed = await db.users.find_one({"_id": oid})
+    return serialize_user(refreshed)
 
 
 @api.get("/admin/cms")

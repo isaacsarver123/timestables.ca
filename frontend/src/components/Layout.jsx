@@ -27,11 +27,18 @@ import {
 import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
 import TrialBanner from "@/components/TrialBanner";
+import { api } from "@/lib/api";
 
 export const Layout = ({ children }) => {
   const [state, setState] = useState(getState());
   const location = useLocation();
   const { user } = useAuth();
+  const [footerText, setFooterText] = useState("timestables.ca · v3");
+  useEffect(() => {
+    api.get("/cms/public").then((r) => {
+      if (r.data?.footer_text) setFooterText(r.data.footer_text);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsub = subscribe(() => setState(getState()));
@@ -221,7 +228,7 @@ export const Layout = ({ children }) => {
 
       <footer className="brut-border-soft border-x-0 border-b-0 surface">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 py-3 flex justify-between items-center text-[11px] text-muted font-mono">
-          <span>timestables.ca · v3</span>
+          <span data-testid="footer-text">{footerText}</span>
           <span>×  ÷  =</span>
         </div>
       </footer>

@@ -278,6 +278,153 @@ class TestAdmin:
         assert r2.status_code == 403
 
 
+# ------------------------------------------------------------------ NEW: CMS EXTENDED FIELDS
+class TestCMSExtended:
+    def test_cms_public_has_new_fields(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/cms/public")
+        assert r.status_code == 200
+        data = r.json()
+        for k in ("support_email", "support_phone", "footer_text",
+                  "login_welcome_title", "login_welcome_body",
+                  "signup_welcome_title", "signup_welcome_body",
+                  "signup_pitch_a_title", "signup_pitch_a_body",
+                  "signup_pitch_b_title", "signup_pitch_b_body"):
+            assert k in data, f"Missing {k}: keys={list(data.keys())}"
+            assert data[k], f"{k} is empty/falsy: {data[k]!r}"
+        # Defaults
+        assert data["support_email"] == "isaacsarver@icloud.com"
+        assert data["support_phone"] == "825-962-3425"
+
+    def test_admin_can_update_support_email_phone(self, api_client):
+        r = api_client.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        )
+        assert r.status_code == 200
+        new_email = f"help_{uuid.uuid4().hex[:6]}@example.com"
+        new_phone = "555-000-1234"
+        r2 = api_client.put(
+            f"{BASE_URL}/api/admin/cms",
+            json={"support_email": new_email, "support_phone": new_phone,
+                  "footer_text": "TEST footer"},
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["support_email"] == new_email
+        assert r2.json()["support_phone"] == new_phone
+
+        # Verify via public endpoint
+        s = requests.Session()
+        r3 = s.get(f"{BASE_URL}/api/cms/public")
+        assert r3.status_code == 200
+        pub = r3.json()
+        assert pub["support_email"] == new_email
+        assert pub["support_phone"] == new_phone
+        assert pub["footer_text"] == "TEST footer"
+
+        # Restore defaults
+        api_client.put(
+            f"{BASE_URL}/api/admin/cms",
+            json={"support_email": "isaacsarver@icloud.com",
+                  "support_phone": "825-962-3425",
+                  "footer_text": "timestables.ca · v3"},
+        )
+
+
+# ------------------------------------------------------------------ NEW: PUT /api/admin/users/{id}
+class TestAdminUserEdit:
+    def _create_user(self, api_client, email=None):
+        email = email or f"TEST_edit_{uuid.uuid4().hex[:8]}@timestables.ca"
+        r = requests.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": email, "password": "testpass123", "name": "Original"},
+            headers={"Content-Type": "application/json", "X-Forwarded-For": _spoofed_ip()},
+        )
+        assert r.status_code == 200, r.text
+        return email, r.json()["id"]
+
+    def _admin_session(self):
+        s = requests.Session()
+        s.headers.update({"Content-Type": "application/json"})
+        r = s.post(f"{BASE_URL}/api/auth/login",
+                   json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        assert r.status_code == 200
+        return s
+
+    def test_admin_edit_user_name(self, api_client):
+        email, uid = self._create_user(api_client)
+        admin = self._admin_session()
+        r = admin.put(f"{BASE_URL}/api/admin/users/{uid}",
+                      json={"name": "Renamed"})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["name"] == "Renamed"
+        assert data["email"] == email.lower()
+
+    def test_admin_edit_user_email(self, api_client):
+        email, uid = self._create_user(api_client)
+        admin = self._admin_session()
+        new_email = f"TEST_renamed_{uuid.uuid4().hex[:6]}@timestables.ca"
+        r = admin.put(f"{BASE_URL}/api/admin/users/{uid}",
+                      json={"email": new_email})
+        assert r.status_code == 200, r.text
+        assert r.json()["email"] == new_email.lower()
+
+    def test_admin_edit_user_email_clash_400(self, api_client):
+        email1, uid1 = self._create_user(api_client)
+        api_client.cookies.clear()
+        email2, uid2 = self._create_user(api_client)
+        admin = self._admin_session()
+        r = admin.put(f"{BASE_URL}/api/admin/users/{uid2}",
+                      json={"email": email1})
+        assert r.status_code == 400, r.text
+        assert "already in use" in r.json().get("detail", "").lower()
+
+    def test_admin_promote_user_then_self_demote_blocked(self, api_client):
+        # Create a regular user
+        email, uid = self._create_user(api_client)
+        admin = self._admin_session()
+
+        # Get the admin user's own id via /api/auth/me
+        me = admin.get(f"{BASE_URL}/api/auth/me")
+        admin_id = me.json()["id"]
+
+        # Promote
+        r = admin.put(f"{BASE_URL}/api/admin/users/{uid}",
+                      json={"role": "admin"})
+        assert r.status_code == 200, r.text
+        assert r.json()["role"] == "admin"
+
+        # Try to demote yourself -> 400
+        r2 = admin.put(f"{BASE_URL}/api/admin/users/{admin_id}",
+                       json={"role": "user"})
+        assert r2.status_code == 400, r2.text
+        assert "demote" in r2.json().get("detail", "").lower()
+
+        # Cleanup: demote the promoted user back
+        r3 = admin.put(f"{BASE_URL}/api/admin/users/{uid}",
+                       json={"role": "user"})
+        assert r3.status_code == 200
+
+    def test_admin_edit_non_admin_403(self, api_client, unique_email):
+        # Create and log in as regular user
+        r = api_client.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": unique_email, "password": "testpass123"},
+            headers={"X-Forwarded-For": _spoofed_ip()},
+        )
+        assert r.status_code == 200
+        my_id = r.json()["id"]
+        r2 = api_client.put(f"{BASE_URL}/api/admin/users/{my_id}",
+                             json={"name": "hacker"})
+        assert r2.status_code == 403
+
+    def test_admin_edit_invalid_id_400(self, api_client):
+        admin = self._admin_session()
+        r = admin.put(f"{BASE_URL}/api/admin/users/not-an-objectid",
+                      json={"name": "x"})
+        assert r.status_code == 400
+
+
 # ------------------------------------------------------------------ USER STATE SYNC
 class TestUserStateSync:
     def test_state_get_put_get(self, api_client, unique_email):

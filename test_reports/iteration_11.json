@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 11 backend + frontend testing complete. 29/29 pytest backend tests PASS (100%). All review-request items verified. New coverage: extended CMS (/api/cms/public exposes support_email/support_phone/footer_text/login_welcome_*/signup_welcome_*/signup_pitch_[a|b]_* with defaults), PUT /api/admin/cms updates support_email+support_phone and /api/cms/public reflects, PUT /api/admin/users/{id} supports name/email/role changes, email-clash -> 400, role=admin promotes, self-demote -> 400 'Can't demote yourself.', non-admin -> 403, invalid ObjectId -> 400. Frontend as Isaac: Settings shows billing-admin with 'Infinite free use' (billing-trial/active/expired hidden), settings-help tiles present with mailto:isaacsarver@icloud.com and tel:8259623425, settings-export removed, settings-import preserved. /admin → Users tab: 14 edit buttons, modal has all expected testids, renaming a user updates the list. /admin → CMS tab: all 12 new testids (cms-support-email, cms-support-phone, cms-footer-text, cms-login-title, cms-login-body, cms-signup-title, cms-signup-body, cms-pitch-a-title, cms-pitch-a-body, cms-pitch-b-title, cms-pitch-b-body, cms-save) visible. Login/Register/Footer read CMS copy ('Welcome back.', 'Welcome.', 'No $99/mo nonsense.', 'No card during the trial.', 'timestables.ca · v3'). /learn Multiple Choice: clicking correct choice shows [data-testid=correct-pulse] inside choices-view + scale-bounce animation on the button. /learn Skip Count: typing correct number (verified with 7-table: 14,21,?,35,42,49 → 28) + Check shows correct-pulse badge AND input flips to bg-emerald-500 / text-white / border-emerald-700 (green pulse). Stripe checkout still 503 (STRIPE_SECRET_KEY empty — expected).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admin_users_edit (server.py:650) updates role/email/name but does NOT re-validate payload.role against body role typos early — currently 400 is raised correctly but body.email is typed EmailStr so Pydantic will reject invalid formats at parse time (good). Consider also trimming name to a max-length (e.g. 120) to prevent DOS-style long names.",
+    "Self-demote check uses str(target['_id']) == str(admin['_id']) — fine. However there is NO check preventing the last admin from being demoted by ANOTHER admin. Low-risk today (only Isaac), but if a second admin exists they could demote each other into a state with zero admins. Consider guarding with 'if body.role==user and (await db.users.count_documents({role:admin}))<=1: 400 last admin'.",
+    "CMSIn has 14 optional fields; consider extracting default values into a module-level DEFAULT_CMS dict that both /startup backfill and a /api/admin/cms/reset endpoint could share, to simplify ops and avoid drift.",
+    "Settings.jsx renders help-phone href as tel:8259623425 (strips dashes) which is correct for dial intent, but the visible text shows '825-962-3425' — ok, but add aria-label for screen readers.",
+    "/app/frontend/src/pages/Learn.jsx ChoicesView resets pickedCorrect after 800ms while CorrectPulse internally exits after 700ms — both work but the two timers aren't centralized. Consider lifting the pulse timing into CorrectPulse and let it handle state with onExit callback for cleanliness.",
+    "stripe_webhook still falls back to json.loads when STRIPE_WEBHOOK_SECRET is blank (dev-friendly). Carry-over note from iter10: guard this with an env flag before production deploy."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestCMSExtended and TestAdminUserEdit classes, 8 new tests; total 29)"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29)",
+    "frontend": "100% (all 8 review-request UI checks verified including correct-pulse in choices and skip)"
+  },
+  "test_credentials": "Admin isaac@timestables.ca / admin12345 (role=admin, is_admin=true, has_access=true). Regular test users created per pytest-run with unique X-Forwarded-For to bypass IP gate. For frontend user-edit test the first row of /admin Users tab was used (some previously-created TEST_* user); rename persisted.",
+  "seed_data_creation": "pytest created ~7 new TEST_<uuid>@timestables.ca trial users (all with unique spoofed X-Forwarded-For). CMS collection: support_email/support_phone/footer_text were momentarily changed during tests and restored to defaults (isaacsarver@icloud.com / 825-962-3425 / 'timestables.ca · v3'). One TEST_* user was renamed to 'Renamed_test_UI' via the /admin UI modal to verify list-update; that rename persists.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Base URL https://calc-arena-4.preview.emergentagent.com. IP gate still active (ALLOW_MULTI_SIGNUP_PER_IP=0) — for new tests always pass a unique X-Forwarded-For per register call. To reset users: mongosh --quiet --eval 'db=db.getSiblingDB(\"test_database\"); db.users.deleteMany({role:\"user\"}); db.login_attempts.deleteMany({});'. Stripe still placeholder-config → /api/stripe/checkout and /api/stripe/portal return 503 by design; don't treat as failure. CorrectPulse timeout in /app/frontend/src/components/CorrectPulse.jsx is ~700ms — check for [data-testid=correct-pulse] within 250-500ms of answer submission. Admin.jsx Users tab search-btn requires an explicit click to refresh list (not live-search). Added TestCMSExtended and TestAdminUserEdit classes to backend_test.py — reuse and extend, don't rewrite.",
+  "rca_of_the_issue": "N/A — no bugs found."
+}

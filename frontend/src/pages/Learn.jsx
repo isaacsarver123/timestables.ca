@@ -10,6 +10,7 @@ import {
   generateSkipCounting,
 } from "@/lib/game";
 import Question from "@/components/Question";
+import CorrectPulse from "@/components/CorrectPulse";
 import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
 import { sfx } from "@/lib/sound";
 
@@ -362,12 +363,14 @@ const ChoicesView = ({ tables }) => {
   const [picked, setPicked] = useState(null);
   const [score, setScore] = useState(0);
   const [count, setCount] = useState(0);
+  const [pickedCorrect, setPickedCorrect] = useState(false);
 
   useEffect(() => {
     setRound(buildRound());
     setPicked(null);
     setScore(0);
     setCount(0);
+    setPickedCorrect(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables.join(",")]);
 
@@ -375,6 +378,7 @@ const ChoicesView = ({ tables }) => {
     if (picked != null) return;
     const correct = c === round.q.answer;
     setPicked(c);
+    setPickedCorrect(correct);
     if (correct) {
       sfx.correct();
       sfx.coin();
@@ -388,11 +392,13 @@ const ChoicesView = ({ tables }) => {
     setTimeout(() => {
       setRound(buildRound());
       setPicked(null);
-    }, 700);
+      setPickedCorrect(false);
+    }, 800);
   };
 
   return (
-    <div className="surface brut-border brut-shadow p-6 sm:p-8" data-testid="choices-view">
+    <div className="surface brut-border brut-shadow p-6 sm:p-8 relative" data-testid="choices-view">
+      <CorrectPulse show={pickedCorrect} />
       <div className="flex items-center justify-between mb-4 text-sm font-mono">
         <span className="text-muted">
           {tables.length === 1 ? `×${tables[0]}` : `${tables.length} tables`} · Multiple choice
@@ -416,16 +422,22 @@ const ChoicesView = ({ tables }) => {
           let style = "surface text-fg hover:surface-2";
           if (picked != null && isCorrect) style = "bg-emerald-500 text-white";
           else if (isPicked && !isCorrect) style = "bg-red-500 text-white";
+          const animate =
+            picked != null && isCorrect
+              ? { scale: [1, 1.18, 1], rotate: [0, -2, 2, 0] }
+              : { scale: 1 };
           return (
-            <button
+            <motion.button
               key={c}
               onClick={() => choose(c)}
               data-testid={`choice-${c}`}
               disabled={picked != null}
+              animate={animate}
+              transition={{ duration: 0.55, ease: [0.34, 1.56, 0.64, 1] }}
               className={`brut-border brut-shadow-sm py-5 sm:py-6 font-mono text-3xl sm:text-4xl font-bold transition-colors ${style}`}
             >
               {c}
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -477,7 +489,8 @@ const SkipView = ({ tables }) => {
   };
 
   return (
-    <div className="surface brut-border brut-shadow p-6 sm:p-8" data-testid="skip-view">
+    <div className="surface brut-border brut-shadow p-6 sm:p-8 relative" data-testid="skip-view">
+      <CorrectPulse show={status === "correct"} />
       <div className="flex items-center justify-between mb-4 text-sm font-mono">
         <span className="text-muted">
           Count by {round.table}
@@ -495,7 +508,7 @@ const SkipView = ({ tables }) => {
           const blank = i === round.blank;
           if (blank) {
             return (
-              <input
+              <motion.input
                 key={i}
                 value={value}
                 onChange={(e) => setValue(e.target.value.replace(/[^0-9]/g, ""))}
@@ -506,9 +519,17 @@ const SkipView = ({ tables }) => {
                 placeholder="?"
                 data-testid="skip-input"
                 autoFocus
+                animate={
+                  status === "correct"
+                    ? { scale: [1, 1.2, 1] }
+                    : status === "wrong"
+                    ? { x: [-6, 6, -4, 4, 0] }
+                    : { scale: 1 }
+                }
+                transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
                 className={`brut-border surface w-20 sm:w-24 font-mono text-3xl sm:text-4xl font-bold text-center py-2 placeholder:opacity-30 text-fg focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors ${
                   status === "correct"
-                    ? "bg-emerald-100 border-emerald-700"
+                    ? "bg-emerald-500 text-white border-emerald-700"
                     : status === "wrong"
                     ? "bg-red-100 border-red-700"
                     : ""

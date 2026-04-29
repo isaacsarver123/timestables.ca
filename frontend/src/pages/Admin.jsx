@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Pencil,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, formatErr } from "@/lib/api";
@@ -58,7 +59,7 @@ export default function Admin() {
       </div>
 
       {tab === "dashboard" && <Dashboard />}
-      {tab === "users" && <UsersTab />}
+      {tab === "users" && <UsersTab currentUserId={user.id} />}
       {tab === "cms" && <CmsTab />}
     </div>
   );
@@ -83,7 +84,9 @@ function Dashboard() {
   const [stats, setStats] = useState(null);
   const [err, setErr] = useState("");
   useEffect(() => {
-    api.get("/admin/stats").then((r) => setStats(r.data)).catch((e) => setErr(formatErr(e.response?.data?.detail) || e.message));
+    api.get("/admin/stats")
+      .then((r) => setStats(r.data))
+      .catch((e) => setErr(formatErr(e.response?.data?.detail) || e.message));
   }, []);
   if (err) return <div className="text-rose-600 text-sm" data-testid="admin-stats-error">{err}</div>;
   if (!stats) return <div className="text-muted text-sm">Loading stats…</div>;
@@ -162,10 +165,11 @@ const Panel = ({ title, children, testid }) => (
   </div>
 );
 
-// ----------------------------------------------------- Users
-function UsersTab() {
+// ----------------------------------------------------- Users + Edit modal
+function UsersTab({ currentUserId }) {
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null);
 
   const load = async (qs = "") => {
     try {
@@ -226,9 +230,106 @@ function UsersTab() {
                   : "rose"
                 }
               />
+              <button
+                onClick={() => setEditing(u)}
+                data-testid={`admin-user-edit-${u.id}`}
+                className="brut-border surface-2 text-fg px-2.5 py-1 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center gap-1"
+              >
+                <Pencil size={11} /> Edit
+              </button>
             </div>
           ))
         )}
+      </div>
+
+      {editing && (
+        <UserEditModal
+          user={editing}
+          currentUserId={currentUserId}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(q); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserEditModal({ user, currentUserId, onClose, onSaved }) {
+  const [email, setEmail] = useState(user.email);
+  const [name, setName] = useState(user.name);
+  const [role, setRole] = useState(user.role);
+  const [busy, setBusy] = useState(false);
+  const isSelf = user.id === currentUserId;
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.put(`/admin/users/${user.id}`, { email, name, role });
+      toast.success("User updated");
+      onSaved();
+    } catch (e) {
+      toast.error(formatErr(e.response?.data?.detail) || "Save failed");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={onClose}
+      data-testid="user-edit-modal"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="surface brut-border brut-shadow w-full max-w-md p-5 space-y-4"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-fg text-lg">Edit user</h3>
+          <button onClick={onClose} data-testid="user-edit-close" className="text-muted hover:text-fg">
+            <X size={18} />
+          </button>
+        </div>
+
+        <Field label="Name" value={name} onChange={setName} testid="user-edit-name" />
+        <Field label="Email" type="email" value={email} onChange={setEmail} testid="user-edit-email" />
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1.5">Role</div>
+          <div className="flex gap-2" data-testid="user-edit-role">
+            {["user", "admin"].map((r) => (
+              <button
+                key={r}
+                onClick={() => setRole(r)}
+                disabled={isSelf && r === "user"}
+                data-testid={`user-edit-role-${r}`}
+                className={`flex-1 brut-border px-3 py-1.5 text-xs font-bold uppercase tracking-wider ${
+                  role === r
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                    : "surface-2 text-fg hover:bg-blue-600 hover:text-white"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          {isSelf && <div className="text-[11px] text-muted mt-1.5">Can't demote yourself.</div>}
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={onClose}
+            data-testid="user-edit-cancel"
+            className="flex-1 brut-border surface-2 text-fg px-3 py-2.5 text-xs font-bold uppercase tracking-wider"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={busy}
+            data-testid="user-edit-save"
+            className="flex-1 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold uppercase tracking-wider text-xs px-3 py-2.5 hover:bg-blue-600 hover:text-white disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -274,19 +375,39 @@ function CmsTab() {
   if (!doc) return <div className="text-muted text-sm">Loading CMS…</div>;
   return (
     <div className="space-y-4 max-w-2xl" data-testid="admin-cms">
-      <div className="surface brut-border p-4 space-y-3">
-        <h3 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Hero</h3>
+      <CmsSection title="Home hero">
         <Field label="Title" value={doc.hero_title || ""} onChange={(v) => set("hero_title", v)} testid="cms-hero-title" />
-        <Field label="Subtitle" value={doc.hero_subtitle || ""} onChange={(v) => set("hero_subtitle", v)} testid="cms-hero-subtitle" />
-      </div>
-      <div className="surface brut-border p-4 space-y-3">
-        <h3 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Paywall</h3>
+        <Field label="Subtitle" value={doc.hero_subtitle || ""} onChange={(v) => set("hero_subtitle", v)} testid="cms-hero-subtitle" multiline />
+      </CmsSection>
+
+      <CmsSection title="Sign-in page">
+        <Field label="Title" value={doc.login_welcome_title || ""} onChange={(v) => set("login_welcome_title", v)} testid="cms-login-title" />
+        <Field label="Body" value={doc.login_welcome_body || ""} onChange={(v) => set("login_welcome_body", v)} testid="cms-login-body" multiline />
+      </CmsSection>
+
+      <CmsSection title="Sign-up page">
+        <Field label="Title" value={doc.signup_welcome_title || ""} onChange={(v) => set("signup_welcome_title", v)} testid="cms-signup-title" />
+        <Field label="Body" value={doc.signup_welcome_body || ""} onChange={(v) => set("signup_welcome_body", v)} testid="cms-signup-body" multiline />
+        <Field label="Pitch A · headline" value={doc.signup_pitch_a_title || ""} onChange={(v) => set("signup_pitch_a_title", v)} testid="cms-pitch-a-title" />
+        <Field label="Pitch A · body" value={doc.signup_pitch_a_body || ""} onChange={(v) => set("signup_pitch_a_body", v)} testid="cms-pitch-a-body" multiline />
+        <Field label="Pitch B · headline" value={doc.signup_pitch_b_title || ""} onChange={(v) => set("signup_pitch_b_title", v)} testid="cms-pitch-b-title" />
+        <Field label="Pitch B · body" value={doc.signup_pitch_b_body || ""} onChange={(v) => set("signup_pitch_b_body", v)} testid="cms-pitch-b-body" multiline />
+      </CmsSection>
+
+      <CmsSection title="Paywall">
         <Field label="Blurb" value={doc.paywall_blurb || ""} onChange={(v) => set("paywall_blurb", v)} testid="cms-paywall-blurb" multiline />
-      </div>
-      <div className="surface brut-border p-4 space-y-3">
-        <h3 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium flex items-center gap-2">
-          <Megaphone size={12} /> Announcement bar
-        </h3>
+      </CmsSection>
+
+      <CmsSection title="Support / contact">
+        <Field label="Support email" type="email" value={doc.support_email || ""} onChange={(v) => set("support_email", v)} testid="cms-support-email" />
+        <Field label="Support phone" value={doc.support_phone || ""} onChange={(v) => set("support_phone", v)} testid="cms-support-phone" />
+      </CmsSection>
+
+      <CmsSection title="Footer">
+        <Field label="Footer text" value={doc.footer_text || ""} onChange={(v) => set("footer_text", v)} testid="cms-footer-text" />
+      </CmsSection>
+
+      <CmsSection title={<span className="flex items-center gap-2"><Megaphone size={12} /> Announcement bar</span>}>
         <Field label="Message" value={doc.announcement || ""} onChange={(v) => set("announcement", v)} testid="cms-announcement" />
         <label className="flex items-center gap-2 text-sm text-fg">
           <input
@@ -297,7 +418,8 @@ function CmsTab() {
           />
           Show on site
         </label>
-      </div>
+      </CmsSection>
+
       <button
         onClick={save}
         disabled={busy}
@@ -310,7 +432,14 @@ function CmsTab() {
   );
 }
 
-const Field = ({ label, value, onChange, testid, multiline }) => (
+const CmsSection = ({ title, children }) => (
+  <div className="surface brut-border p-4 space-y-3">
+    <h3 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">{title}</h3>
+    {children}
+  </div>
+);
+
+const Field = ({ label, value, onChange, testid, multiline, type = "text" }) => (
   <label className="block">
     <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1.5">{label}</div>
     {multiline ? (
@@ -323,7 +452,7 @@ const Field = ({ label, value, onChange, testid, multiline }) => (
       />
     ) : (
       <input
-        type="text"
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         data-testid={testid}

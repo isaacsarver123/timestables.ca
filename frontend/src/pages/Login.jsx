@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, LogIn, UserPlus } from "lucide-react";
@@ -13,6 +13,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [cms, setCms] = useState(null);
+  useEffect(() => {
+    api.get("/cms/public").then((r) => setCms(r.data)).catch(() => {});
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -36,9 +40,11 @@ export default function Login() {
 
       <div className="mb-7">
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Sign in</div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1">Welcome back.</h1>
-        <p className="text-sm text-muted mt-2">
-          Pick up where you left off. Your progress syncs across every device you sign in on.
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1" data-testid="login-title">
+          {cms?.login_welcome_title || "Welcome back."}
+        </h1>
+        <p className="text-sm text-muted mt-2" data-testid="login-body">
+          {cms?.login_welcome_body || "Pick up where you left off. Your progress syncs across every device you sign in on."}
         </p>
       </div>
 

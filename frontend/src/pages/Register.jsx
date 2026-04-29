@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, ShieldCheck, DollarSign } from "lucide-react";
@@ -14,6 +14,10 @@ export default function Register() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [cms, setCms] = useState(null);
+  useEffect(() => {
+    api.get("/cms/public").then((r) => setCms(r.data)).catch(() => {});
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -41,10 +45,16 @@ export default function Register() {
 
       <div className="mb-6">
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Sign up</div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1">Welcome.</h1>
-        <p className="text-sm text-muted mt-2">
-          2-day free trial, no card required. After that it's <span className="font-bold text-fg">$5 CAD/month</span>
-          {" — "}cancel anytime, no funny business.
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1" data-testid="register-title">
+          {cms?.signup_welcome_title || "Welcome."}
+        </h1>
+        <p className="text-sm text-muted mt-2" data-testid="register-body">
+          {cms?.signup_welcome_body || (
+            <>
+              2-day free trial, no card required. After that it's <span className="font-bold text-fg">$5 CAD/month</span>
+              {" — "}cancel anytime, no funny business.
+            </>
+          )}
         </p>
       </div>
 
@@ -53,20 +63,18 @@ export default function Register() {
         <div className="flex items-start gap-2.5">
           <DollarSign size={15} className="text-emerald-500 mt-0.5 shrink-0" />
           <div className="text-xs text-fg">
-            <span className="font-bold">No $99/mo nonsense.</span>{" "}
+            <span className="font-bold">{cms?.signup_pitch_a_title || "No $99/mo nonsense."}</span>{" "}
             <span className="text-muted">
-              Other sites charge ridiculous fees for the same thing. We charge $5 — flat. That keeps the
-              servers on and the developers fed. That's it.
+              {cms?.signup_pitch_a_body || "Other sites charge ridiculous fees for the same thing. We charge $5 — flat. That keeps the servers on and the developers fed. That's it."}
             </span>
           </div>
         </div>
         <div className="flex items-start gap-2.5">
           <ShieldCheck size={15} className="text-blue-600 mt-0.5 shrink-0" />
           <div className="text-xs text-fg">
-            <span className="font-bold">No card during the trial.</span>{" "}
+            <span className="font-bold">{cms?.signup_pitch_b_title || "No card during the trial."}</span>{" "}
             <span className="text-muted">
-              You only put a card in if you decide to keep going after 2 days. We'll never charge you
-              by surprise.
+              {cms?.signup_pitch_b_body || "You only put a card in if you decide to keep going after 2 days. We'll never charge you by surprise."}
             </span>
           </div>
         </div>
