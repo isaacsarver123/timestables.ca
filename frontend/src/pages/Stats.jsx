@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, RotateCcw, TrendingUp } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, RotateCcw, TrendingUp, Target } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -10,7 +10,14 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { getState, subscribe, resetAll, progressToNextLevel } from "@/lib/storage";
+import {
+  getState,
+  subscribe,
+  resetAll,
+  progressToNextLevel,
+  setSelectedTables,
+} from "@/lib/storage";
+import { toast } from "sonner";
 
 const TABLES = Array.from({ length: 20 }, (_, i) => i + 1);
 
@@ -27,7 +34,32 @@ function lastNDays(n) {
 
 const Stats = () => {
   const [state, setState] = useState(getState());
+  const navigate = useNavigate();
   useEffect(() => subscribe(() => setState(getState())), []);
+
+  // Pick the weakest 3 tables (by accuracy) that have at least 4 attempts.
+  const computeWeakest = () => {
+    const candidates = Object.entries(state.stats || {})
+      .map(([k, s]) => {
+        const total = s.correct + s.wrong;
+        if (total < 4) return null;
+        return { table: parseInt(k, 10), acc: s.correct / total, total };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.acc - b.acc);
+    return candidates.slice(0, 3).map((c) => c.table);
+  };
+
+  const startWeaknessDrill = () => {
+    const weak = computeWeakest();
+    if (weak.length === 0) {
+      toast.error("Not enough data yet — answer at least 4 questions in 1+ tables.");
+      return;
+    }
+    setSelectedTables(weak);
+    toast.success(`Drilling ×${weak.join(", ×")}`);
+    navigate("/play/quickfire");
+  };
 
   const totalAnswered = state.totalCorrect + state.totalWrong;
   const overallAcc = totalAnswered ? Math.round((state.totalCorrect / totalAnswered) * 100) : 0;
@@ -80,6 +112,28 @@ const Stats = () => {
         <StatCard label="Best Streak" value={`x${state.bestStreak}`} />
         <StatCard label="Boss Level" value={state.bossLevel} accent="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950" />
       </div>
+
+      {/* Weakness drill */}
+      <button
+        onClick={startWeaknessDrill}
+        data-testid="weakness-drill"
+        className="w-full surface brut-border brut-shadow p-4 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:brut-shadow-lg transition-all flex items-center gap-4 text-left"
+      >
+        <div className="w-11 h-11 brut-border bg-red-500 text-white grid place-items-center">
+          <Target size={20} strokeWidth={2.5} />
+        </div>
+        <div className="flex-1">
+          <div className="font-bold text-fg text-sm sm:text-base">
+            Drill my weakest tables
+          </div>
+          <div className="text-xs text-muted">
+            Auto-pick the 3 tables you score lowest on, drop into Quick-Fire.
+          </div>
+        </div>
+        <div className="text-xs font-bold uppercase tracking-widest text-blue-600 hidden sm:block">
+          Go →
+        </div>
+      </button>
 
       {/* Progress chart */}
       <div className="surface brut-border p-5" data-testid="progress-chart">

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, X, Divide, ArrowRight } from "lucide-react";
 import Question from "@/components/Question";
 import StepDivision from "@/components/StepDivision";
+import RemainderDivision from "@/components/RemainderDivision";
 import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
 import { generateLongDiv, generateStepDivision, generateRemainderDiv } from "@/lib/game";
 import { sfx } from "@/lib/sound";
@@ -262,69 +263,42 @@ const LongDiv = () => {
             </div>
           ) : isRem ? (
             <div
-              className="surface brut-border brut-shadow p-7 sm:p-9 text-center"
+              className="surface brut-border brut-shadow p-5 sm:p-7"
               data-testid="remainder-card"
             >
-              <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">
-                Solve · enter quotient and remainder
+              <RemainderDivision
+                problem={question}
+                onCorrect={() => {
+                  const reward = level === "easy" ? 4 : level === "medium" ? 6 : 9;
+                  addCoinsAndXp(reward, 10);
+                  setCorrect((c) => c + 1);
+                  recordAnswer({
+                    a: question.a,
+                    b: question.b,
+                    op: "÷",
+                    correct: true,
+                    ms: 0,
+                  });
+                }}
+                onWrong={() => {
+                  recordAnswer({
+                    a: question.a,
+                    b: question.b,
+                    op: "÷",
+                    correct: false,
+                    ms: 0,
+                  });
+                }}
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={next}
+                  data-testid="rem-next"
+                  className="surface brut-border brut-shadow font-bold text-sm px-5 py-2 hover:surface-2 active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all uppercase tracking-wider text-fg flex items-center gap-2"
+                >
+                  Next problem <ArrowRight size={14} />
+                </button>
               </div>
-              <div className="font-mono text-5xl sm:text-6xl font-black tracking-tight text-fg leading-none">
-                {question.prompt} <span className="opacity-30">=</span>
-              </div>
-              <div className="mt-7 flex items-center justify-center gap-3 sm:gap-4">
-                <input
-                  value={qVal}
-                  onChange={(e) => setQVal(e.target.value.replace(/[^0-9]/g, ""))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitRemainder();
-                  }}
-                  placeholder="q"
-                  data-testid="rem-q-input"
-                  autoFocus
-                  disabled={status !== "idle"}
-                  inputMode="numeric"
-                  className={`brut-border surface w-28 sm:w-36 font-mono text-3xl sm:text-4xl font-bold text-center py-3 placeholder:opacity-30 text-fg focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-colors ${
-                    status === "correct"
-                      ? "bg-emerald-100 border-emerald-700"
-                      : status === "wrong"
-                      ? "bg-red-100 border-red-700"
-                      : ""
-                  }`}
-                />
-                <span className="font-mono text-2xl sm:text-3xl font-bold text-muted">r</span>
-                <input
-                  value={rVal}
-                  onChange={(e) => setRVal(e.target.value.replace(/[^0-9]/g, ""))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") submitRemainder();
-                  }}
-                  placeholder="r"
-                  data-testid="rem-r-input"
-                  disabled={status !== "idle"}
-                  inputMode="numeric"
-                  className={`brut-border surface w-24 sm:w-28 font-mono text-3xl sm:text-4xl font-bold text-center py-3 placeholder:opacity-30 text-fg focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-colors ${
-                    status === "correct"
-                      ? "bg-emerald-100 border-emerald-700"
-                      : status === "wrong"
-                      ? "bg-red-100 border-red-700"
-                      : ""
-                  }`}
-                />
-              </div>
-              {showHint && status === "idle" && (
-                <div className="mt-3 text-xs text-muted font-mono">
-                  {question.a} ÷ {question.b} = {question.answer.quotient} r{" "}
-                  {question.answer.remainder}
-                </div>
-              )}
-              <button
-                onClick={submitRemainder}
-                disabled={status !== "idle"}
-                data-testid="rem-submit"
-                className="mt-5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold text-sm px-6 py-2.5 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none disabled:opacity-50 transition-all uppercase tracking-wider"
-              >
-                Enter ↵
-              </button>
             </div>
           ) : (
             <div className="surface brut-border brut-shadow p-7 sm:p-9">

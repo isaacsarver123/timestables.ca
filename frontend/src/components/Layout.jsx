@@ -63,7 +63,7 @@ export const Layout = ({ children }) => {
             </div>
             <div className="leading-tight">
               <div className="font-bold tracking-tight text-base sm:text-lg text-fg">
-                Times Tables
+                Times Tables<span className="text-blue-600">.ca</span>
               </div>
             </div>
           </Link>
