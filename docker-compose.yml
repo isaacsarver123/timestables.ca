@@ -1,0 +1,71 @@
+version: "3.9"
+
+# All app containers bind to 127.0.0.1 ONLY. Edge proxy (caddy) is the only
+# container with public ports. Forbidden ports are NEVER published:
+#   80, 443, 3000, 3001, 3002, 8001, 8002, 8847, 18789, 27017, 11434, 1000
+# (Caddy uses ${EDGE_PORT}, default 8443.)
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    # internal-only port for app, plus host loopback for emergency mongosh
+    ports:
+      - "127.0.0.1:${MONGO_HOST_PORT:-37017}:27017"
+    volumes:
+      # MATHACCOUNTS is the literal drive name the user mounted on the host.
+      - ${MONGO_DATA:-MATHACCOUNTS/timestables-mongo}:/data/db
+    networks: [internal]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      MONGO_URL: "mongodb://mongo:27017"
+      DB_NAME: "${DB_NAME:-timestables}"
+      JWT_SECRET: "${JWT_SECRET}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      STRIPE_API_KEY: "${STRIPE_API_KEY}"
+      SUBSCRIPTION_PRICE_CAD: "${SUBSCRIPTION_PRICE_CAD:-5.00}"
+      TRIAL_DAYS: "${TRIAL_DAYS:-2}"
+      FRONTEND_URL: "${FRONTEND_URL}"
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-38001}:8001"
+    depends_on: [mongo]
+    networks: [internal]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_BACKEND_URL: "${FRONTEND_URL}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-33000}:80"
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: "${DOMAIN:-localhost}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${EDGE_PORT:-8443}:443"
+    depends_on: [backend, frontend]
+    networks: [internal]
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge

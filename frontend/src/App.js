@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
+import PaywallGuard from "@/components/PaywallGuard";
 import Home from "@/pages/Home";
 import QuickFire from "@/pages/QuickFire";
 import Streak from "@/pages/Streak";
@@ -14,7 +15,12 @@ import Daily from "@/pages/Daily";
 import LongMul from "@/pages/LongMul";
 import LongDiv from "@/pages/LongDiv";
 import Settings from "@/pages/Settings";
-import { getState, subscribe } from "@/lib/storage";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Paywall from "@/pages/Paywall";
+import { BillingSuccess, BillingCancel } from "@/pages/BillingResult";
+import { AuthProvider } from "@/lib/auth";
+import { initRemoteSync, getState, subscribe } from "@/lib/storage";
 import { setSoundEnabled } from "@/lib/sound";
 
 function ThemeRoot({ children }) {
@@ -40,39 +46,55 @@ function ThemeRoot({ children }) {
 }
 
 function App() {
+  useEffect(() => { initRemoteSync(); }, []);
   return (
     <ThemeRoot>
-      <BrowserRouter>
-        <Layout>
+      <AuthProvider>
+        <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/learn" element={<Learn />} />
-            <Route path="/play/quickfire" element={<QuickFire />} />
-            <Route path="/play/streak" element={<Streak />} />
-            <Route path="/play/boss" element={<Boss />} />
-            <Route path="/play/daily" element={<Daily />} />
-            <Route path="/play/long-mul" element={<LongMul />} />
-            <Route path="/play/long-div" element={<LongDiv />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/stats" element={<Stats />} />
-            <Route path="/shop" element={<Shop />} />
+            {/* Public */}
+            <Route path="/login" element={<Layout><Login /></Layout>} />
+            <Route path="/register" element={<Layout><Register /></Layout>} />
+            <Route path="/billing/success" element={<Layout><BillingSuccess /></Layout>} />
+            <Route path="/billing/cancel" element={<Layout><BillingCancel /></Layout>} />
+
+            {/* Settings is reachable even when paywalled, so users can manage billing/logout */}
+            <Route
+              path="/settings"
+              element={<Layout><PaywallGuard allowExpired><Settings /></PaywallGuard></Layout>}
+            />
+
+            {/* Paywall page (accessible directly too) */}
+            <Route path="/paywall" element={<Layout><PaywallGuard allowExpired><Paywall /></PaywallGuard></Layout>} />
+
+            {/* Gated app */}
+            <Route path="/" element={<Layout><PaywallGuard><Home /></PaywallGuard></Layout>} />
+            <Route path="/learn" element={<Layout><PaywallGuard><Learn /></PaywallGuard></Layout>} />
+            <Route path="/play/quickfire" element={<Layout><PaywallGuard><QuickFire /></PaywallGuard></Layout>} />
+            <Route path="/play/streak" element={<Layout><PaywallGuard><Streak /></PaywallGuard></Layout>} />
+            <Route path="/play/boss" element={<Layout><PaywallGuard><Boss /></PaywallGuard></Layout>} />
+            <Route path="/play/daily" element={<Layout><PaywallGuard><Daily /></PaywallGuard></Layout>} />
+            <Route path="/play/long-mul" element={<Layout><PaywallGuard><LongMul /></PaywallGuard></Layout>} />
+            <Route path="/play/long-div" element={<Layout><PaywallGuard><LongDiv /></PaywallGuard></Layout>} />
+            <Route path="/stats" element={<Layout><PaywallGuard><Stats /></PaywallGuard></Layout>} />
+            <Route path="/shop" element={<Layout><PaywallGuard><Shop /></PaywallGuard></Layout>} />
           </Routes>
-        </Layout>
-        <Toaster
-          position="top-center"
-          toastOptions={{
-            style: {
-              border: "2px solid var(--app-line)",
-              boxShadow: "4px 4px 0 0 var(--app-shadow)",
-              borderRadius: 0,
-              fontFamily: "Outfit, sans-serif",
-              fontWeight: 600,
-              background: "var(--app-surface)",
-              color: "var(--app-fg)",
-            },
-          }}
-        />
-      </BrowserRouter>
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              style: {
+                border: "2px solid var(--app-line)",
+                boxShadow: "4px 4px 0 0 var(--app-shadow)",
+                borderRadius: 0,
+                fontFamily: "Outfit, sans-serif",
+                fontWeight: 600,
+                background: "var(--app-surface)",
+                color: "var(--app-fg)",
+              },
+            }}
+          />
+        </BrowserRouter>
+      </AuthProvider>
     </ThemeRoot>
   );
 }

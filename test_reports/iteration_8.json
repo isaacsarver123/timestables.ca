@@ -1,0 +1,51 @@
+{
+  "summary": "Tested all backend auth/state/stripe endpoints (12 pytest cases) and full frontend flows (register, trial banner, settings, billing, long-div remainder, weakness drill, logout). 11/12 backend tests pass; only Stripe checkout fails with 500 because STRIPE_API_KEY='sk_test_emergent' is rejected by the real Stripe API (Stripe SDK throws AuthenticationError 'Invalid API Key provided: sk_test_****gent'). All frontend flows work: register sets cookies, redirects to /, shows TrialBanner ('1d 23h left in trial' + Subscribe), header shows 'Times Tables.ca' brand, hud-user pill, footer 'timestables.ca · v3'. Settings billing-trial panel + Subscribe button + logout (settings-logout) work. /play/long-div RemainderDivision component renders correctly with rem-q-input, rem-r-input, rem-submit, remainder-division testids when 'diff-rem-easy/medium/hard' clicked. Weakness drill button exists and works as designed (toasts 'not enough data' for fresh user — expected behavior).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/stripe/checkout",
+        "issue": "Returns 500 — the raw `stripe` Python SDK with STRIPE_API_KEY='sk_test_emergent' fails with stripe._error.AuthenticationError 'Invalid API Key provided: sk_test_****gent'. The Emergent stripe playbook expects the integration to use the `emergentintegrations.payments.stripe.checkout.StripeCheckout` wrapper (which routes through Emergent's proxy) instead of calling stripe.Customer.create / stripe.checkout.Session.create directly. Same issue affects /api/stripe/portal and /api/stripe/status/{session_id} since they all hit Stripe live.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Subscribe → Stripe Checkout",
+        "issue": "Clicking the Subscribe button in TrialBanner / Settings posts to /api/stripe/checkout which returns 500 (root cause is the backend Stripe key — see backend_issues.critical). UI handles error gracefully but user cannot reach Stripe Checkout.",
+        "affected_selectors": ["billing-subscribe (Settings)", "TrialBanner Subscribe link"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Switch /api/stripe/checkout, /api/stripe/portal, /api/stripe/status/{session_id} and the webhook from the raw `stripe` SDK to `emergentintegrations.payments.stripe.checkout.StripeCheckout` so STRIPE_API_KEY='sk_test_emergent' works through Emergent's proxy. The `customer-create` call (line 320) and `checkout.Session.create` (line 326) are the failing paths."
+  ],
+  "critical_code_review_comments": [
+    "server.py uses raw `stripe` SDK — incompatible with the Emergent stripe key. Migrate to emergentintegrations wrapper (do NOT web-search; this is internal).",
+    "/app/backend/.env has CORS_ORIGINS='*' but backend code ignores it and instead reads FRONTEND_URL only — minor inconsistency, but currently safe because allow_origins includes the preview URL explicitly.",
+    "stripe_webhook signature is NOT verified (no STRIPE_WEBHOOK_SECRET) — acceptable for dev but flag for production hardening.",
+    "Brute-force check uses ISO-string comparison on `ts` field ($gt cutoff.isoformat()) — works lexicographically because of fixed ISO format, but storing as datetime would be cleaner.",
+    "Stripe Customer is created on every checkout if customer_id missing — fine, but if checkout fails (current state) the customer_id is never persisted, leading to repeated Stripe customer creation attempts on each retry.",
+    "Difficulty button testids on /play/long-div are `diff-rem-easy/medium/hard` (not `rem-easy/medium/hard` as the review request stated) — this is correct in code; just clarifying the testid prefix is `diff-`."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (created)",
+    "/app/backend/tests/conftest.py (created)"
+  ],
+  "success_rate": {"backend": "92% (11/12)", "frontend": "100% (all UI flows verified)"},
+  "test_credentials": "Admin admin@timestables.ca/admin12345 (active sub). New users registered with random email TEST_<uuid>@timestables.ca / testpass123.",
+  "seed_data_creation": "Created several TEST_*@timestables.ca users via /api/auth/register during runs. Login attempts cleaned by backend on success; brute-force test left up to 6 failure rows in db.login_attempts for one ip:email key.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent migrates Stripe to emergentintegrations, re-run /app/backend/tests/backend_test.py — only TestStripeCheckout::test_checkout_creates_session_and_tx is failing today. Frontend flows are confirmed working; just verify the Subscribe button now returns a 200 with a Stripe URL. Use REACT_APP_BACKEND_URL from /app/frontend/.env. Fresh users have no game history so /stats Weakness Drill toasts 'Not enough data' — that is expected; to verify navigation, seed some history first.",
+  "rca of the issue": "Stripe 500: backend uses `import stripe; stripe.api_key = 'sk_test_emergent'` then `stripe.Customer.create(...)` which sends the request to api.stripe.com directly. Stripe rejects `sk_test_emergent` because it is not a real Stripe secret key — it is the Emergent-internal sandbox key that only works through emergentintegrations' proxy. Fix: replace direct stripe.* calls with `from emergentintegrations.payments.stripe.checkout import StripeCheckout`, instantiate with api_key=STRIPE_API_KEY and webhook_url, then call checkout.create_checkout_session(...) which routes through the Emergent proxy."
+}

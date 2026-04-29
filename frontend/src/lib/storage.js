@@ -1,6 +1,57 @@
-// LocalStorage state for the app.
+// State for the app — localStorage cache + optional backend sync when logged in.
+import { api } from "./api";
 
 const KEY = "tt_arena_state_v2";
+
+// ---- remote sync ---------------------------------------------------------
+let _remoteEnabled = false;
+let _hydrating = false;
+let _saveTimer = null;
+
+async function _push() {
+  if (!_remoteEnabled) return;
+  try {
+    await api.put("/user/state", { state: getState() });
+  } catch {
+    /* offline / not auth — keep going with localStorage */
+  }
+}
+
+function _scheduleRemoteSave() {
+  if (!_remoteEnabled || _hydrating) return;
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(_push, 800);
+}
+
+export async function initRemoteSync() {
+  // Called on app boot AND after login. Tries /user/state; if 200, hydrate
+  // localStorage from server (server is the source of truth across devices).
+  try {
+    const { data } = await api.get("/user/state");
+    _remoteEnabled = true;
+    if (data && data.state && typeof data.state === "object") {
+      _hydrating = true;
+      try {
+        localStorage.setItem(KEY, JSON.stringify(data.state));
+        subscribers.forEach((cb) => { try { cb(getState()); } catch {} });
+      } finally {
+        _hydrating = false;
+      }
+    } else {
+      // First login from this account: push current local state up.
+      _push();
+    }
+    return true;
+  } catch {
+    _remoteEnabled = false;
+    return false;
+  }
+}
+
+export function disableRemoteSync() {
+  _remoteEnabled = false;
+}
+
 
 const DEFAULT_STATE = {
   coins: 0,
@@ -73,6 +124,7 @@ export function saveState(next) {
       /* ignore */
     }
   });
+  _scheduleRemoteSave();
 }
 
 export function updateState(updater) {

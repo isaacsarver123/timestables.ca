@@ -13,6 +13,8 @@ import {
   Moon,
   Settings as SettingsIcon,
   Flame,
+  LogIn,
+  User as UserIcon,
 } from "lucide-react";
 import {
   getState,
@@ -22,10 +24,13 @@ import {
   setTheme,
 } from "@/lib/storage";
 import { setSoundEnabled } from "@/lib/sound";
+import { useAuth } from "@/lib/auth";
+import TrialBanner from "@/components/TrialBanner";
 
 export const Layout = ({ children }) => {
   const [state, setState] = useState(getState());
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     const unsub = subscribe(() => setState(getState()));
@@ -142,6 +147,27 @@ export const Layout = ({ children }) => {
                 />
               </div>
             </div>
+            {user ? (
+              <Link
+                to="/settings"
+                data-testid="hud-user"
+                title={user.email}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface hover:bg-blue-600 hover:text-white"
+              >
+                <UserIcon size={13} />
+                <span className="hidden sm:inline font-mono text-xs font-semibold max-w-[110px] truncate">
+                  {user.name}
+                </span>
+              </Link>
+            ) : user === null ? (
+              <Link
+                to="/login"
+                data-testid="hud-login"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 hover:bg-blue-600 hover:text-white text-xs font-bold uppercase tracking-wider"
+              >
+                <LogIn size={13} /> Sign in
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -172,12 +198,13 @@ export const Layout = ({ children }) => {
       </header>
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-5 sm:px-8 py-8 sm:py-10">
+        <TrialBanner />
         {children}
       </main>
 
       <footer className="brut-border-soft border-x-0 border-b-0 surface">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 py-3 flex justify-between items-center text-[11px] text-muted font-mono">
-          <span>local save · v2</span>
+          <span>timestables.ca · v3</span>
           <span>×  ÷  =</span>
         </div>
       </footer>
