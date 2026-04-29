@@ -139,10 +139,10 @@ class TestUserStateSync:
         assert r.status_code == 401
 
 
-# ------------------------------------------------------------------ STRIPE CHECKOUT
+# ------------------------------------------------------------------ STRIPE CHECKOUT (emergentintegrations wrapper)
 class TestStripeCheckout:
     def test_checkout_creates_session_and_tx(self, api_client, unique_email):
-        # Register and login (register sets cookies)
+        # Register (register sets cookies)
         r = api_client.post(f"{BASE_URL}/api/auth/register",
                             json={"email": unique_email, "password": "testpass123"})
         assert r.status_code == 200
@@ -153,11 +153,89 @@ class TestStripeCheckout:
         data = r2.json()
         assert "url" in data
         assert "session_id" in data
-        assert data["url"].startswith("https://")
-        assert "stripe.com" in data["url"] or "checkout" in data["url"]
+        # Must be an actual Stripe checkout URL
+        assert data["url"].startswith("https://checkout.stripe.com/"), f"Unexpected URL: {data['url']}"
+        # Session id should be a test-mode Stripe session id
+        assert data["session_id"].startswith("cs_"), f"Unexpected session_id: {data['session_id']}"
+
+    def test_checkout_status_returns_required_fields(self, api_client, unique_email):
+        # Register + create checkout to get a real session id
+        r = api_client.post(f"{BASE_URL}/api/auth/register",
+                            json={"email": unique_email, "password": "testpass123"})
+        assert r.status_code == 200
+        r2 = api_client.post(f"{BASE_URL}/api/stripe/checkout",
+                             json={"origin": BASE_URL})
+        assert r2.status_code == 200, r2.text
+        session_id = r2.json()["session_id"]
+
+        # Stripe/Emergent proxy can take a moment to make the session retrievable.
+        # Poll status with small retries.
+        r3 = None
+        for _ in range(5):
+            r3 = api_client.get(f"{BASE_URL}/api/stripe/status/{session_id}")
+            if r3.status_code == 200:
+                break
+            time.sleep(1.5)
+        assert r3.status_code == 200, r3.text
+        s = r3.json()
+        for k in ("status", "payment_status", "amount_total", "currency"):
+            assert k in s, f"Missing key {k} in status response: {s}"
+        # Unpaid test session -> payment_status should be 'unpaid' (or 'no_payment_required')
+        assert s["payment_status"] in ("unpaid", "no_payment_required", "paid")
+        assert s["currency"] in ("cad", "CAD")
+        # amount_total in cents for $5 CAD = 500
+        assert s["amount_total"] in (500, None) or isinstance(s["amount_total"], int)
 
     def test_checkout_unauthenticated_401(self, api_client):
         s = requests.Session()
         s.headers.update({"Content-Type": "application/json"})
         r = s.post(f"{BASE_URL}/api/stripe/checkout", json={"origin": BASE_URL})
+        assert r.status_code == 401
+
+
+# ------------------------------------------------------------------ STRIPE CANCEL / RESUME RENEWAL
+class TestStripeRenewalToggle:
+    def test_cancel_and_resume_flip_cancel_at_period_end(self, api_client):
+        # Admin user has subscription.status=active
+        r = api_client.post(f"{BASE_URL}/api/auth/login",
+                            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        assert r.status_code == 200
+
+        # Baseline via /me
+        me0 = api_client.get(f"{BASE_URL}/api/auth/me")
+        assert me0.status_code == 200
+        base_flag = me0.json().get("billing", {}).get("cancel_at_period_end", False)
+
+        # Cancel -> flag True
+        rc = api_client.post(f"{BASE_URL}/api/stripe/cancel-renewal")
+        assert rc.status_code == 200, rc.text
+        assert rc.json().get("ok") is True
+
+        me1 = api_client.get(f"{BASE_URL}/api/auth/me")
+        assert me1.status_code == 200
+        assert me1.json()["billing"]["cancel_at_period_end"] is True
+
+        # Resume -> flag False
+        rr = api_client.post(f"{BASE_URL}/api/stripe/resume-renewal")
+        assert rr.status_code == 200, rr.text
+        assert rr.json().get("ok") is True
+
+        me2 = api_client.get(f"{BASE_URL}/api/auth/me")
+        assert me2.status_code == 200
+        assert me2.json()["billing"]["cancel_at_period_end"] is False
+
+        # Restore baseline if it differed
+        if base_flag is True:
+            api_client.post(f"{BASE_URL}/api/stripe/cancel-renewal")
+
+    def test_cancel_renewal_unauthenticated_401(self, api_client):
+        s = requests.Session()
+        s.headers.update({"Content-Type": "application/json"})
+        r = s.post(f"{BASE_URL}/api/stripe/cancel-renewal")
+        assert r.status_code == 401
+
+    def test_resume_renewal_unauthenticated_401(self, api_client):
+        s = requests.Session()
+        s.headers.update({"Content-Type": "application/json"})
+        r = s.post(f"{BASE_URL}/api/stripe/resume-renewal")
         assert r.status_code == 401

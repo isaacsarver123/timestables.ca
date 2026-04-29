@@ -22,7 +22,10 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-import stripe
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout,
+    CheckoutSessionRequest,
+)
 
 # ------------------------------------------------------------------ ENV / DB
 MONGO_URL = os.environ["MONGO_URL"]
@@ -35,8 +38,7 @@ STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 PRICE_CAD = float(os.environ.get("SUBSCRIPTION_PRICE_CAD", "5.00"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "2"))
-
-stripe.api_key = STRIPE_API_KEY
+PERIOD_DAYS = 30  # length of one paid period (manual-renew subscription model)
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -306,92 +308,88 @@ async def put_user_state(body: StateIn, user: dict = Depends(get_token_user)):
 
 
 # -------------------------------------------------------- STRIPE
-@api.post("/stripe/checkout")
-async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)):
-    """Create a subscription checkout session for $5 CAD/month."""
-    body = await request.json()
-    origin = body.get("origin") or FRONTEND_URL
-    origin = origin.rstrip("/")
+def _stripe_client(request: Request) -> StripeCheckout:
+    """Build StripeCheckout from emergentintegrations using current host for webhook."""
+    host = str(request.base_url).rstrip("/")
+    return StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host}/api/webhook/stripe")
 
-    # Reuse stripe customer if exists
+
+async def _grant_paid_period(user_id: str, days: int = PERIOD_DAYS):
+    """Mark a user as 'active' for `days` days from now (or extend existing period)."""
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        return
     sub = user.get("subscription") or {}
-    customer_id = sub.get("customer_id")
-    if not customer_id:
-        cust = stripe.Customer.create(email=user["email"], metadata={"user_id": str(user["_id"])})
-        customer_id = cust.id
-        await db.users.update_one(
-            {"_id": user["_id"]}, {"$set": {"subscription.customer_id": customer_id}}
-        )
-
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        mode="subscription",
-        line_items=[{
-            "price_data": {
-                "currency": "cad",
-                "unit_amount": int(round(PRICE_CAD * 100)),
-                "recurring": {"interval": "month"},
-                "product_data": {"name": "timestables.ca Premium"},
-            },
-            "quantity": 1,
-        }],
-        success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{origin}/billing/cancel",
-        metadata={"user_id": str(user["_id"])},
-        subscription_data={"metadata": {"user_id": str(user["_id"])}},
+    now = datetime.now(timezone.utc)
+    cur_end = sub.get("current_period_end")
+    if isinstance(cur_end, str):
+        try:
+            cur_end_dt = datetime.fromisoformat(cur_end)
+            if cur_end_dt.tzinfo is None:
+                cur_end_dt = cur_end_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            cur_end_dt = None
+    else:
+        cur_end_dt = None
+    base = cur_end_dt if (cur_end_dt and cur_end_dt > now) else now
+    new_end = (base + timedelta(days=days)).isoformat()
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {
+            "subscription.status": "active",
+            "subscription.current_period_end": new_end,
+            "subscription.cancel_at_period_end": False,
+        }},
     )
 
+
+@api.post("/stripe/checkout")
+async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)):
+    """Create a $5 CAD one-time checkout. On success, grants 30 days of access."""
+    body = await request.json()
+    origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
+
+    sc = _stripe_client(request)
+    req = CheckoutSessionRequest(
+        amount=PRICE_CAD,
+        currency="cad",
+        success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/billing/cancel",
+        metadata={"user_id": str(user["_id"]), "email": user["email"], "kind": "subscription_period"},
+    )
+    try:
+        session = await sc.create_checkout_session(req)
+    except Exception as e:
+        log.error("Stripe checkout failed: %s", e)
+        raise HTTPException(status_code=502, detail="Payment provider unavailable. Try again in a moment.")
+
     await db.payment_transactions.insert_one({
-        "session_id": session.id,
+        "session_id": session.session_id,
         "user_id": str(user["_id"]),
         "email": user["email"],
         "amount": PRICE_CAD,
         "currency": "cad",
         "status": "initiated",
         "payment_status": "unpaid",
+        "kind": "subscription_period",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    return {"url": session.url, "session_id": session.id}
-
-
-async def _sync_user_subscription(user_id: str, customer_id: str):
-    """Pull latest subscription from Stripe and persist."""
-    subs = stripe.Subscription.list(customer=customer_id, status="all", limit=5)
-    if not subs.data:
-        return
-    # pick the most relevant
-    priority = {"active": 0, "trialing": 1, "past_due": 2, "unpaid": 3, "canceled": 4, "incomplete": 5}
-    chosen = sorted(subs.data, key=lambda s: priority.get(s.status, 9))[0]
-
-    update = {
-        "subscription.status": chosen.status,
-        "subscription.customer_id": customer_id,
-        "subscription.subscription_id": chosen.id,
-        "subscription.current_period_end": datetime.fromtimestamp(
-            chosen.current_period_end, tz=timezone.utc
-        ).isoformat() if chosen.current_period_end else None,
-        "subscription.cancel_at_period_end": bool(chosen.cancel_at_period_end),
-    }
-    # default payment method → card brand + last4
-    try:
-        cust = stripe.Customer.retrieve(customer_id, expand=["invoice_settings.default_payment_method"])
-        pm = cust.invoice_settings.default_payment_method if cust.invoice_settings else None
-        if pm and getattr(pm, "card", None):
-            update["subscription.brand"] = pm.card.brand
-            update["subscription.last4"] = pm.card.last4
-    except Exception as e:
-        log.warning("Failed to fetch payment method for %s: %s", customer_id, e)
-
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    return {"url": session.url, "session_id": session.session_id}
 
 
 @api.get("/stripe/status/{session_id}")
-async def stripe_session_status(session_id: str, user: dict = Depends(get_token_user)):
-    """Polled by the success page to mark transaction complete + refresh user."""
-    sess = stripe.checkout.Session.retrieve(session_id)
+async def stripe_session_status(session_id: str, request: Request, user: dict = Depends(get_token_user)):
+    sc = _stripe_client(request)
+    try:
+        status = await sc.get_checkout_status(session_id)
+    except Exception as e:
+        log.error("Stripe status fetch failed: %s", e)
+        raise HTTPException(status_code=502, detail="Could not check payment status.")
+
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-    if tx and tx.get("payment_status") != "paid" and sess.payment_status == "paid":
+    paid = (status.payment_status == "paid")
+    if tx and tx.get("payment_status") != "paid" and paid:
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {
@@ -400,59 +398,62 @@ async def stripe_session_status(session_id: str, user: dict = Depends(get_token_
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }},
         )
-        # refresh subscription details
-        user_id = (sess.metadata or {}).get("user_id") or str(user["_id"])
-        if sess.customer:
-            await _sync_user_subscription(user_id, sess.customer)
+        user_id = (status.metadata or {}).get("user_id") or str(user["_id"])
+        await _grant_paid_period(user_id, days=PERIOD_DAYS)
+
     return {
-        "status": sess.status,
-        "payment_status": sess.payment_status,
-        "amount_total": sess.amount_total,
-        "currency": sess.currency,
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency,
     }
 
 
-@api.post("/stripe/portal")
-async def stripe_portal(request: Request, user: dict = Depends(get_token_user)):
-    body = await request.json()
-    origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
-    sub = user.get("subscription") or {}
-    customer_id = sub.get("customer_id")
-    if not customer_id:
-        raise HTTPException(status_code=400, detail="No Stripe customer on file")
-    portal = stripe.billing_portal.Session.create(
-        customer=customer_id, return_url=f"{origin}/settings"
+@api.post("/stripe/cancel-renewal")
+async def stripe_cancel_renewal(user: dict = Depends(get_token_user)):
+    """Manual-renew flow: user just stops paying. Mark cancel_at_period_end = True."""
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"subscription.cancel_at_period_end": True}},
     )
-    return {"url": portal.url}
+    return {"ok": True}
+
+
+@api.post("/stripe/resume-renewal")
+async def stripe_resume_renewal(user: dict = Depends(get_token_user)):
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"subscription.cancel_at_period_end": False}},
+    )
+    return {"ok": True}
 
 
 @api.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    """Stripe webhook — uses Stripe SDK. We don't strictly verify signature in
-    dev (no STRIPE_WEBHOOK_SECRET), but we re-fetch from Stripe to confirm."""
+    sc = _stripe_client(request)
     payload = await request.body()
+    sig = request.headers.get("Stripe-Signature", "")
     try:
-        event = stripe.Event.construct_from(__import__("json").loads(payload), stripe.api_key)
+        evt = await sc.handle_webhook(payload, sig)
     except Exception as e:
-        log.error("Bad webhook payload: %s", e)
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        log.error("Webhook handler failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid webhook")
 
-    etype = event["type"]
-    obj = event["data"]["object"]
-    log.info("Stripe webhook: %s", etype)
-
-    customer_id = obj.get("customer")
-    user_id = (obj.get("metadata") or {}).get("user_id")
-    if not user_id and customer_id:
-        # find user by stored customer_id
-        u = await db.users.find_one({"subscription.customer_id": customer_id})
-        if u:
-            user_id = str(u["_id"])
-    if user_id and customer_id:
-        try:
-            await _sync_user_subscription(user_id, customer_id)
-        except Exception as e:
-            log.error("sync failed: %s", e)
+    log.info("Webhook event: %s session=%s", evt.event_type, evt.session_id)
+    if evt.payment_status == "paid" and evt.session_id:
+        tx = await db.payment_transactions.find_one({"session_id": evt.session_id})
+        if tx and tx.get("payment_status") != "paid":
+            await db.payment_transactions.update_one(
+                {"session_id": evt.session_id},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }},
+            )
+            user_id = (evt.metadata or {}).get("user_id") or tx.get("user_id")
+            if user_id:
+                await _grant_paid_period(user_id, days=PERIOD_DAYS)
     return {"received": True}
 
 

@@ -16,7 +16,6 @@ import {
   LogOut,
   CheckCircle2,
   Clock3,
-  ExternalLink,
 } from "lucide-react";
 import {
   getState,
@@ -96,10 +95,13 @@ const Settings = () => {
 
   const openPortal = async () => {
     try {
-      const { data } = await api.post("/stripe/portal", { origin: window.location.origin });
-      window.location.href = data.url;
+      const cancel = !user?.billing?.cancel_at_period_end;
+      const path = cancel ? "/stripe/cancel-renewal" : "/stripe/resume-renewal";
+      await api.post(path);
+      toast.success(cancel ? "Renewal cancelled" : "Renewal resumed");
+      window.location.reload();
     } catch (ex) {
-      toast.error(formatErr(ex.response?.data?.detail) || "Could not open portal");
+      toast.error(formatErr(ex.response?.data?.detail) || "Could not update");
     }
   };
 
@@ -302,7 +304,7 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
     catch { return iso; }
   };
 
-  if (active && (sub.last4 || sub.current_period_end)) {
+  if (active && sub.current_period_end) {
     return (
       <div className="space-y-3" data-testid="billing-active">
         <div className="flex items-center gap-2">
@@ -312,26 +314,35 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
-          <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
+          <Tile label="Next renewal" value={niceDate(sub.current_period_end)} testid="billing-next" />
           <Tile
-            label="Card on file"
-            value={sub.last4 ? `•••• ${sub.last4}` : "—"}
-            sub={sub.brand ? sub.brand.toUpperCase() : ""}
+            label="Method"
+            value="Stripe Checkout"
+            sub={user.email}
             testid="billing-card"
           />
         </div>
-        {sub.cancel_at_period_end && (
+        {sub.cancel_at_period_end ? (
           <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 brut-border-soft p-2.5">
-            Subscription will cancel at the end of the current period.
+            Renewal cancelled — access ends {niceDate(sub.current_period_end)}.
           </div>
-        )}
-        <button
-          onClick={onPortal}
-          data-testid="billing-portal"
-          className="w-full brut-border surface-2 text-fg px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center justify-center gap-2"
-        >
-          Manage subscription <ExternalLink size={12} />
-        </button>
+        ) : null}
+        <div className="flex gap-2">
+          <button
+            onClick={onSubscribe}
+            data-testid="billing-renew"
+            className="flex-1 brut-border surface-2 text-fg px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white"
+          >
+            Renew now (+30 days)
+          </button>
+          <button
+            onClick={onPortal}
+            data-testid="billing-portal"
+            className="brut-border surface-2 text-fg px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-rose-500 hover:text-white"
+          >
+            {sub.cancel_at_period_end ? "Resume renewal" : "Cancel renewal"}
+          </button>
+        </div>
       </div>
     );
   }

@@ -1,0 +1,50 @@
+{
+  "summary": "Re-tested backend & frontend after Stripe migration to emergentintegrations. Stripe checkout now works end-to-end: POST /api/stripe/checkout returns 200 with valid https://checkout.stripe.com/ URL + cs_test_... session_id and persists payment_transactions row with payment_status='unpaid'. Cancel/Resume renewal toggle cancel_at_period_end and are reflected via /api/auth/me. Frontend integration verified: Settings billing-subscribe and TrialBanner trial-banner-subscribe both POST /api/stripe/checkout and return 200. Backend: 15/16 pytest pass (93.75%). The single failure is /api/stripe/status/{session_id} which returns 502 because the emergent Stripe proxy returns 404 'No such checkout.session' for sessions that were just created (eventual-consistency/routing issue at the emergent proxy level). All 4 /api/stripe/* endpoints from the review request are integrated; the migration itself is successful.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/stripe/status/{session_id}",
+        "issue": "Returns 502 'Could not check payment status.' immediately after checkout. Root cause: the emergent Stripe proxy (integrations.emergentagent.com/stripe/v1/checkout/sessions/cs_test_...) returns 404 'resource_missing: No such checkout.session' even though the POST that created the session returned 200 with the same id. Retries after 1.5s x 5 still 404. Additionally, the first attempt right after POST surfaced a separate Pydantic validation error in emergentintegrations: '1 validation error for CheckoutStatusResponse: Input should be a valid dictionary, input_type=StripeObject'. In real production the user is redirected back from Stripe minutes later, so this might not block the /billing/success flow, but it is a real consistency / library bug that should be flagged."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Settings BillingPanel",
+        "issue": "Admin user (subscription.status='active') is rendered as 'Free trial - 1d 23h remaining' with the billing-trial/billing-subscribe panel instead of the billing-active panel containing billing-renew + billing-portal (cancel/resume renewal). The new cancel-renewal / resume-renewal UI buttons are therefore never reachable through the UI for the admin/active-sub test account. Likely cause: user.in_trial is true for admin because seed_admin sets trial_ends_at in the future; the BillingPanel switch falls into the in_trial branch before checking subscription_status==='active'.",
+        "selector": "data-testid=billing-renew / billing-portal (not rendered)",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Investigate /api/stripe/status/{session_id} 502 — emergent Stripe proxy returns 404 for a freshly created session. Options: (a) wait+retry inside sc.get_checkout_status, (b) fall back to reading the local payment_transactions row and returning its stored payment_status if Stripe says resource_missing, (c) file an issue with emergentintegrations library about the CheckoutStatusResponse pydantic validation error.",
+    "Fix Settings BillingPanel ordering so that subscription_status==='active' wins over in_trial (or seed_admin should clear trial_ends_at). Without that, billing-renew/billing-portal (cancel/resume renewal) are never shown in the UI for active subscribers."
+  ],
+  "critical_code_review_comments": [
+    "server.py _stripe_client() creates a new StripeCheckout on every request — fine, but the webhook_url is derived from request.base_url which could be internal in some deployments; consider using FRONTEND_URL/BASE_URL from env for stability.",
+    "stripe_webhook does not verify Stripe-Signature (no STRIPE_WEBHOOK_SECRET). Acceptable for dev but hard block for prod.",
+    "BillingPanel branching in Settings.jsx checks in_trial before subscription_status==='active', causing admin (active sub + future trial_ends_at) to render the trial UI and hide cancel/resume renewal.",
+    "/api/stripe/status/{session_id} currently surfaces a generic 502 with no distinction between 'Stripe not yet propagated' (transient) and 'truly missing session' (permanent). Consider returning the locally-stored payment_transactions row as a fallback and 200 so the /billing/success screen is never blank.",
+    "test_admin user is seeded with both subscription.status='active' AND a 2-day trial window — the UI treats these two states as mutually exclusive, so the seed should probably only set one."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestStripeRenewalToggle + expanded TestStripeCheckout with status + payment_transactions assertions)"
+  ],
+  "success_rate": {"backend": "93.75% (15/16)", "frontend": "100% (both subscribe flows POST /api/stripe/checkout -> 200)"},
+  "test_credentials": "Admin admin@timestables.ca / admin12345 (subscription.status=active, has_access=true, UI still shows trial). Fresh trial users created via /api/auth/register as TEST_<uuid>@timestables.ca / testpass123.",
+  "seed_data_creation": "Created ~6 TEST_*@timestables.ca trial users + multiple payment_transactions rows with payment_status='unpaid' during checkout tests. Also flipped admin.subscription.cancel_at_period_end true->false->true->false during the renewal-toggle test (restored to original).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend Stripe migration to emergentintegrations is successful for /api/stripe/checkout, /api/stripe/cancel-renewal, /api/stripe/resume-renewal and the webhook. Only /api/stripe/status/{session_id} is flaky — reproduces reliably as 502 because the emergent Stripe proxy 404s freshly created sessions. If main agent adds a DB fallback in /api/stripe/status, re-run pytest class TestStripeCheckout. Also recheck BillingPanel branching so that active-sub renders billing-renew + billing-portal (needed to UI-exercise cancel/resume renewal).",
+  "rca_of_the_issue": "Two residual issues. (1) /api/stripe/status 502 — emergentintegrations' get_checkout_status() hits https://integrations.emergentagent.com/stripe/v1/checkout/sessions/<id> which returns 404 'No such checkout.session' for a cs_test_ id that was created by the same proxy ~1s earlier. Additionally, on the very first call right after POST the library itself threw a pydantic validation error 'Input should be a valid dictionary' for CheckoutStatusResponse (input was a StripeObject, not a dict). (2) Admin UI trial mis-display — /api/auth/me returns subscription_status='active' for admin but also trial_ends_at in the future, and Settings.jsx checks user.in_trial before subscription_status, so the admin is rendered as a trial user and the billing-renew / billing-portal (cancel/resume) buttons never appear."
+}
