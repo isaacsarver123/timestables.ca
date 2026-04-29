@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Heart, ShieldCheck, DollarSign } from "lucide-react";
+import { ArrowRight, ShieldCheck, DollarSign } from "lucide-react";
 import { api, formatErr } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { AuthTabs } from "@/pages/Login";
@@ -48,8 +48,8 @@ export default function Register() {
         </p>
       </div>
 
-      {/* Friendly pitch — anti-bait-and-switch */}
-      <div className="surface brut-border p-4 mb-5 space-y-2" data-testid="register-pitch">
+      {/* Friendly pitch — no box, just copy */}
+      <div className="mb-6 space-y-2.5" data-testid="register-pitch">
         <div className="flex items-start gap-2.5">
           <DollarSign size={15} className="text-emerald-500 mt-0.5 shrink-0" />
           <div className="text-xs text-fg">
@@ -67,15 +67,6 @@ export default function Register() {
             <span className="text-muted">
               You only put a card in if you decide to keep going after 2 days. We'll never charge you
               by surprise.
-            </span>
-          </div>
-        </div>
-        <div className="flex items-start gap-2.5">
-          <Heart size={15} className="text-rose-500 mt-0.5 shrink-0" />
-          <div className="text-xs text-fg">
-            <span className="font-bold">Built by an indie dev.</span>{" "}
-            <span className="text-muted">
-              Real human shipping real updates. If something breaks, message us — we'll fix it.
             </span>
           </div>
         </div>
