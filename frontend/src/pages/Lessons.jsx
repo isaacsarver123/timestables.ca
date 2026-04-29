@@ -301,7 +301,8 @@ export default function Lessons() {
   // Path/custom lesson UI is multiple-choice (LessonQuestion). Test mode keeps
   // typed input via the original Question component. Both flow through here.
   const submitChoice = (n) => {
-    if (status !== "idle") return;
+    // LessonQuestion now defers onAnswer until the user clicks Continue, so
+    // by the time we get here it's a deliberate commit. No status gating.
     if (n === q.answer) onCorrect();
     else onWrong(true);
   };
@@ -313,14 +314,17 @@ export default function Lessons() {
     else onWrong(true);
   };
 
+  // The Continue button in LessonQuestion is the user's commit signal — by
+  // the time onCorrect / onWrong run, the user has already SEEN the answer
+  // flash locally and clicked Continue. So we update bookkeeping and advance
+  // immediately, no setTimeout, no separate review card.
   const onCorrect = () => {
     sfx.correct(); sfx.coin();
     setCorrect((c) => c + 1);
     if (q.isHard) setHardCorrect((c) => c + 1);
     addCoinsAndXp(1, 3);
     recordAnswer({ a: q.a, b: q.b, op: q.op, correct: true, ms: 0 });
-    setStatus("correct");
-    setTimeout(advance, 600);
+    advance();
   };
 
   const onWrong = (typed = false) => {
@@ -332,7 +336,6 @@ export default function Lessons() {
       setHearts((h) => {
         const nh = h - 1;
         if (nh <= 0) {
-          // Fail.
           setTimeout(() => finishTest(false), 700);
         } else {
           setTimeout(advance, 700);
@@ -340,8 +343,9 @@ export default function Lessons() {
         return nh;
       });
     } else {
-      setStatus("reviewing");
-      setExplanation(explain(q));
+      // Path/custom lesson — LessonQuestion already showed the correct answer
+      // before the user clicked Continue, so just advance.
+      advance();
     }
   };
 
@@ -1012,33 +1016,54 @@ function LessonPath({
 // A single lesson node + a popover that appears on hover/focus (or tap on
 // touch devices) offering Start / Jump-here. Done lessons show no popover.
 // ─────────────────────────────────────────────────────────────────────────
-function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
+function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sideHint }) {
   const [open, setOpen] = useState(false);
-  const close = () => setOpen(false);
-  // Show popover whenever the cursor hovers a non-completed node, or when
-  // it gains keyboard focus. A direct click on an unlocked node still just
-  // starts the lesson (the natural primary action).
+  const closeTimer = useRef(null);
+  const cancelClose = () => { if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 220); // generous; lets cursor traverse
+  };
+  const openNow = () => { cancelClose(); setOpen(true); };
+
+  // Decide which side the popover sits on. `sideHint` from parent: 'right' is
+  // default; pass 'left' for nodes near the right edge so the popover doesn't
+  // clip off-screen. 'center' (below) for safe fallback.
+  const side = sideHint || "right";
+  const popoverPositioning =
+    side === "left"
+      ? "right-full top-1/2 -translate-y-1/2"
+      : side === "right"
+      ? "left-full top-1/2 -translate-y-1/2"
+      : "left-1/2 -translate-x-1/2 top-full"; // center-below
+
   return (
+    // The wrapping <div> uses padding to extend the hover hit-area BEYOND the
+    // node so the cursor has a generous corridor to reach the popover without
+    // tripping onMouseLeave. Padding ≈ popover side gap.
     <div
       className={`relative ${open ? "z-50" : "z-10"}`}
-      onMouseEnter={() => !done && setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      style={{ padding: "16px 32px" }}
+      onMouseEnter={openNow}
+      onMouseLeave={scheduleClose}
     >
       <button
         onClick={(e) => {
           e.stopPropagation();
-          if (done) return;
-          if (unlocked) {
-            // Direct path: start the lesson.
+          cancelClose();
+          if (done) {
+            // Completed lessons re-run as practice on direct click.
             onStart();
-            close();
+            setOpen(false);
+          } else if (unlocked) {
+            onStart();
+            setOpen(false);
           } else {
-            // Locked → show the popover so the user can hit "Jump here".
             setOpen((v) => !v);
           }
         }}
-        onFocus={() => !done && setOpen(true)}
-        onBlur={() => setTimeout(close, 120)}
+        onFocus={openNow}
+        onBlur={scheduleClose}
         data-testid={`lesson-path-node-${lesson.id}`}
         aria-label={`${unit.title} · ${lesson.label}${done ? " (done)" : !unlocked ? " (locked)" : ""}`}
         aria-expanded={open}
@@ -1070,15 +1095,16 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
       </button>
 
       <AnimatePresence>
-        {open && !done && (
+        {open && (
           <motion.div
             key="popover"
             initial={{ opacity: 0, y: -6, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.95 }}
             transition={{ duration: 0.14 }}
-            className="absolute left-full top-1/2 -translate-y-1/2 z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto"
-            style={{ marginLeft: 0, paddingLeft: 12, paddingTop: 12, paddingRight: 12, paddingBottom: 12 }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            className={`absolute ${popoverPositioning} z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto p-3`}
             data-testid={`lesson-path-popover-${lesson.id}`}
             role="dialog"
           >
@@ -1088,20 +1114,53 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
             <div className="font-bold text-fg text-sm mb-1">
               {lesson.label}
               {lesson.boss && <span className="ml-1 text-amber-500">★</span>}
+              {done && <span className="ml-1 text-emerald-500" title="Completed">✓</span>}
             </div>
             <div className="text-[11px] text-muted mb-3 leading-relaxed">
-              {unlocked
-                ? "Click the node to start, or jump here with a calibrated test (20 Q · 5 hearts) to mark this lesson and everything before it complete."
-                : "Locked — but you can jump here by passing the test."}
+              {done
+                ? "You've cleared this one. Hit Practice to run it again — XP only, no progress changes."
+                : unlocked
+                ? "Click the node to start. Or jump here — calibrated test (20 Q · 5 hearts) marks this lesson and everything before it complete."
+                : "Locked. Jump here passes if you nail the calibrated test (20 Q · 5 hearts)."}
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); onJump(); close(); }}
-                data-testid={`lesson-path-jump-${lesson.id}`}
-                className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-              >
-                Jump here
-              </button>
+              {done ? (
+                // Completed lesson → only "Practice" (re-run, no jump-test).
+                <button
+                  onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
+                  data-testid={`lesson-path-practice-${lesson.id}`}
+                  className="flex-1 brut-border brut-shadow-sm bg-emerald-500 text-white font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+                >
+                  Practice
+                </button>
+              ) : unlocked ? (
+                // Next-up unlocked lesson → "Start" + "Jump here".
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onStart(); setOpen(false); }}
+                    data-testid={`lesson-path-start-${lesson.id}`}
+                    className="flex-1 brut-border brut-shadow-sm bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+                  >
+                    Start
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onJump(); setOpen(false); }}
+                    data-testid={`lesson-path-jump-${lesson.id}`}
+                    className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+                  >
+                    Jump here
+                  </button>
+                </>
+              ) : (
+                // Locked / further ahead → only "Jump here" (full-width).
+                <button
+                  onClick={(e) => { e.stopPropagation(); onJump(); setOpen(false); }}
+                  data-testid={`lesson-path-jump-${lesson.id}`}
+                  className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+                >
+                  Jump here
+                </button>
+              )}
             </div>
           </motion.div>
         )}

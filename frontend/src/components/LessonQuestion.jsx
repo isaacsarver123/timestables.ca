@@ -35,7 +35,9 @@ function visualKindFor(q) {
   }
   if (q.op === "÷") {
     if (q.a > 80) return "bigNumber";
-    if (q.a <= 30 && q.b <= 10) return "numberLine";
+    // Only show the slider for the simplest divisions (small dividend AND
+    // small divisor). For anything bigger or long-division, use group dots.
+    if (q.a <= 20 && q.b <= 5) return "numberLine";
     return "divGroups";
   }
   return "bigNumber";
@@ -188,8 +190,8 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-      <div className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-bold flex items-center gap-1.5">
-        <MoveHorizontal size={11} /> drag the marker · {dividend} ÷ {divisor}
+      <div className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-bold flex items-center gap-1.5 text-center">
+        <MoveHorizontal size={11} /> drag the marker to where {dividend} ÷ {divisor} lands
       </div>
       <svg
         ref={svgRef}
@@ -278,9 +280,15 @@ export default function LessonQuestion({ question, onAnswer, status }) {
   const localResolved = chosen != null;
 
   const submit = (n) => {
-    if (chosen != null) return; // already answered locally — guard against double-submit only
+    if (chosen != null) return; // already answered locally — guard against double-submit
     setChosen(n);
-    onAnswer(n);
+    // Don't notify parent yet — wait for the user to click Continue. This
+    // prevents auto-advance and lets them dwell on the visualization.
+  };
+
+  const handleContinue = () => {
+    if (chosen == null) return;
+    onAnswer(chosen);
   };
 
   let visual;
@@ -342,7 +350,6 @@ export default function LessonQuestion({ question, onAnswer, status }) {
         {choices.map((c) => {
           const isPicked = chosen === c;
           const isCorrectChoice = c === question.answer;
-          // Color from LOCAL state — instant feedback, no parent dependency.
           let cls = "surface text-fg hover:-translate-y-0.5 hover:bg-blue-100 dark:hover:bg-blue-950/30";
           if (localResolved && isPicked && localCorrect) cls = "bg-emerald-500 text-white";
           else if (localResolved && isPicked && !localCorrect) cls = "bg-rose-500 text-white";
@@ -351,7 +358,7 @@ export default function LessonQuestion({ question, onAnswer, status }) {
             <motion.button
               key={c}
               onClick={() => submit(c)}
-              disabled={localResolved || status !== "idle"}
+              disabled={localResolved}
               data-testid={`lesson-answer-tile-${c}`}
               animate={
                 localResolved && isPicked && localCorrect ? { scale: [1, 1.08, 1] }
@@ -366,6 +373,29 @@ export default function LessonQuestion({ question, onAnswer, status }) {
           );
         })}
       </div>
+
+      {/* Continue button — appears once the user has picked an answer. They
+          must click this to advance, no auto-advance. */}
+      <AnimatePresence>
+        {localResolved && (
+          <motion.button
+            key="continue"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={handleContinue}
+            data-testid="lesson-continue"
+            className={`mt-2 w-full brut-border brut-shadow font-bold uppercase tracking-wider text-xs py-3 rounded-md transition-colors ${
+              localCorrect
+                ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                : "bg-rose-500 text-white hover:bg-rose-600"
+            }`}
+          >
+            {localCorrect ? "Continue" : "Got it — continue"}
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
