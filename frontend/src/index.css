@@ -15,33 +15,80 @@ body {
     font-family: "Outfit", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #fafafa;
-    color: #09090b;
+    background-color: var(--app-bg);
+    color: var(--app-fg);
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
 }
 
 .font-mono {
     font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Brutalist primitives */
-.brut-border {
-    border: 2px solid #18181b;
-}
-.brut-shadow {
-    box-shadow: 4px 4px 0 0 #18181b;
-}
-.brut-shadow-lg {
-    box-shadow: 8px 8px 0 0 #18181b;
-}
-.brut-shadow-sm {
-    box-shadow: 2px 2px 0 0 #18181b;
+/* Theme variables */
+:root {
+    --app-bg: #fafafa;
+    --app-fg: #09090b;
+    --app-surface: #ffffff;
+    --app-surface-2: #f4f4f5;
+    --app-line: #18181b;
+    --app-line-soft: #e4e4e7;
+    --app-shadow: #18181b;
+    --app-muted: #71717a;
+    --dot-color: #e4e4e7;
 }
 
-/* Subtle dotted background for app shell */
+html.dark {
+    --app-bg: #0a0a0b;
+    --app-fg: #f4f4f5;
+    --app-surface: #18181b;
+    --app-surface-2: #27272a;
+    --app-line: #f4f4f5;
+    --app-line-soft: #27272a;
+    --app-shadow: #f4f4f5;
+    --app-muted: #a1a1aa;
+    --dot-color: #1f1f22;
+}
+
+/* Brutalist primitives bound to theme */
+.brut-border {
+    border: 2px solid var(--app-line);
+}
+.brut-border-soft {
+    border: 1.5px solid var(--app-line-soft);
+}
+.brut-shadow {
+    box-shadow: 4px 4px 0 0 var(--app-shadow);
+}
+.brut-shadow-lg {
+    box-shadow: 8px 8px 0 0 var(--app-shadow);
+}
+.brut-shadow-sm {
+    box-shadow: 2px 2px 0 0 var(--app-shadow);
+}
+.brut-shadow-none {
+    box-shadow: none;
+}
+
+/* Themed surfaces */
+.surface {
+    background-color: var(--app-surface);
+    color: var(--app-fg);
+}
+.surface-2 {
+    background-color: var(--app-surface-2);
+}
+.text-fg {
+    color: var(--app-fg);
+}
+.text-muted {
+    color: var(--app-muted);
+}
+
 .dotted-bg {
-    background-image: radial-gradient(#e4e4e7 1px, transparent 1px);
-    background-size: 22px 22px;
-    background-position: 0 0;
+    background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+    background-size: 24px 24px;
 }
 
 /* Hide number input spinners */
@@ -54,7 +101,6 @@ input[type="number"] {
     -moz-appearance: textfield;
 }
 
-/* Selection */
 ::selection {
     background: #2563eb;
     color: #ffffff;
@@ -82,6 +128,27 @@ input[type="number"] {
         --input: 0 0% 89.8%;
         --ring: 217 91% 50%;
         --radius: 0rem;
+    }
+    .dark {
+        --background: 240 6% 4%;
+        --foreground: 240 5% 96%;
+        --card: 240 6% 9%;
+        --card-foreground: 240 5% 96%;
+        --popover: 240 6% 9%;
+        --popover-foreground: 240 5% 96%;
+        --primary: 217 91% 60%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 4% 16%;
+        --secondary-foreground: 240 5% 96%;
+        --muted: 240 4% 14%;
+        --muted-foreground: 240 4% 65%;
+        --accent: 240 4% 16%;
+        --accent-foreground: 240 5% 96%;
+        --destructive: 0 70% 55%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 4% 92%;
+        --input: 240 4% 16%;
+        --ring: 217 91% 60%;
     }
 }
 

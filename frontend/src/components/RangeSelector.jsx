@@ -1,49 +1,61 @@
 import { useState, useEffect } from "react";
-import { getState, setSelectedTables, subscribe } from "@/lib/storage";
+import { getState, setSelectedTables, setOpMode, subscribe } from "@/lib/storage";
 
-const ALL = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
+const ALL = Array.from({ length: 20 }, (_, i) => i + 1);
 
 export const RangeSelector = () => {
-  const [selected, setSelected] = useState(getState().selectedTables);
+  const [state, setState] = useState(getState());
 
   useEffect(() => {
-    const unsub = subscribe(() => setSelected(getState().selectedTables));
+    const unsub = subscribe(() => setState(getState()));
     return () => unsub();
   }, []);
 
+  const selected = state.selectedTables;
+
   const toggle = (n) => {
     const next = selected.includes(n) ? selected.filter((x) => x !== n) : [...selected, n];
-    if (next.length === 0) return; // require at least one
+    if (next.length === 0) return;
     setSelectedTables(next);
   };
 
   const setPreset = (preset) => {
     if (preset === "easy") setSelectedTables([2, 3, 4, 5]);
     if (preset === "core") setSelectedTables([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    if (preset === "twelve") setSelectedTables([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     if (preset === "all") setSelectedTables(ALL);
-    if (preset === "tough") setSelectedTables([6, 7, 8, 9, 11, 12]);
+    if (preset === "tough") setSelectedTables([6, 7, 8, 9, 11, 12, 13, 14, 17, 19]);
   };
 
+  const opChips = [
+    ["mul", "×"],
+    ["div", "÷"],
+    ["mixed", "Mixed"],
+  ];
+
   return (
-    <div className="bg-white brut-border brut-shadow p-6" data-testid="range-selector">
+    <div className="surface brut-border p-5 sm:p-6" data-testid="range-selector">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 font-bold">
-            01 · Pick your tables
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
+            Settings
           </div>
-          <h3 className="text-xl sm:text-2xl font-black tracking-tight">Practice Set</h3>
+          <h3 className="text-base sm:text-lg font-bold tracking-tight text-fg mt-0.5">
+            Tables &amp; operation
+          </h3>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap">
           {[
             ["easy", "2–5"],
             ["core", "2–10"],
-            ["all", "1–12"],
+            ["twelve", "2–12"],
+            ["all", "1–20"],
             ["tough", "Tough"],
           ].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setPreset(key)}
-              className="px-3 py-1.5 brut-border bg-white text-xs font-bold uppercase tracking-wider hover:bg-zinc-100 active:translate-y-0.5"
+              className="px-2.5 py-1 brut-border-soft surface text-[11px] font-semibold uppercase tracking-wider text-fg hover:surface-2"
               data-testid={`preset-${key}`}
             >
               {label}
@@ -52,7 +64,7 @@ export const RangeSelector = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
+      <div className="grid grid-cols-10 gap-1.5 sm:gap-2">
         {ALL.map((n) => {
           const active = selected.includes(n);
           return (
@@ -60,10 +72,10 @@ export const RangeSelector = () => {
               key={n}
               onClick={() => toggle(n)}
               data-testid={`table-toggle-${n}`}
-              className={`aspect-square brut-border font-mono text-xl font-black grid place-items-center transition-all ${
+              className={`aspect-square brut-border font-mono text-sm sm:text-base font-bold grid place-items-center transition-all ${
                 active
-                  ? "bg-blue-600 text-white brut-shadow-sm"
-                  : "bg-white text-zinc-500 hover:bg-zinc-100"
+                  ? "bg-blue-600 text-white"
+                  : "surface text-muted hover:surface-2"
               }`}
             >
               {n}
@@ -71,8 +83,30 @@ export const RangeSelector = () => {
           );
         })}
       </div>
-      <div className="mt-3 text-xs font-mono text-zinc-500">
-        {selected.length} of 12 selected · tap to toggle
+
+      <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
+        <div className="text-xs font-mono text-muted">
+          {selected.length} of 20 selected
+        </div>
+        <div className="flex gap-1.5" data-testid="op-mode-chips">
+          {opChips.map(([key, label]) => {
+            const active = state.opMode === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setOpMode(key)}
+                data-testid={`op-${key}`}
+                className={`px-3 py-1.5 brut-border text-xs font-bold transition-colors ${
+                  active
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                    : "surface text-fg hover:surface-2"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

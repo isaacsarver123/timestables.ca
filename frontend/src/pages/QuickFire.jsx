@@ -12,6 +12,7 @@ import {
   recordRunResult,
 } from "@/lib/storage";
 import { generateQuestion } from "@/lib/game";
+import { sfx } from "@/lib/sound";
 
 const ROUND_SECONDS = 60;
 
@@ -21,7 +22,7 @@ const QuickFire = () => {
   useEffect(() => subscribe(() => setState(getState())), []);
 
   const [question, setQuestion] = useState(() =>
-    generateQuestion(getState().selectedTables)
+    generateQuestion(getState().selectedTables, { op: getState().opMode })
   );
   const [value, setValue] = useState("");
   const [status, setStatus] = useState("idle");
@@ -40,7 +41,6 @@ const QuickFire = () => {
     recordRunResult({ mode: "quickfire", score, streak: combo });
   }, [score, combo]);
 
-  // timer
   useEffect(() => {
     if (!running || frozen) return;
     if (time <= 0) {
@@ -52,7 +52,12 @@ const QuickFire = () => {
   }, [running, frozen, time, finish]);
 
   const next = () => {
-    setQuestion((q) => generateQuestion(getState().selectedTables, { lastKey: q.key }));
+    setQuestion((q) =>
+      generateQuestion(getState().selectedTables, {
+        lastKey: q.key,
+        op: getState().opMode,
+      })
+    );
     setValue("");
     setStatus("idle");
     startTs.current = performance.now();
@@ -63,7 +68,7 @@ const QuickFire = () => {
     if (value === "" || value === "-") return;
     const ms = Math.round(performance.now() - startTs.current);
     const correct = parseInt(value, 10) === question.answer;
-    recordAnswer({ a: question.a, b: question.b, correct, ms });
+    recordAnswer({ a: question.a, b: question.b, op: question.op, correct, ms });
     if (correct) {
       const baseCoins = 1 + Math.floor(combo / 5);
       const earnedCoins = doubler ? baseCoins * 2 : baseCoins;
@@ -73,6 +78,8 @@ const QuickFire = () => {
       setCombo((c) => c + 1);
       setCoinsEarned((c) => c + earnedCoins);
       setStatus("correct");
+      sfx.correct();
+      sfx.coin();
       const id = Math.random().toString(36).slice(2);
       setPoppers((p) => [...p, { id, n: earnedCoins }]);
       setTimeout(() => setPoppers((p) => p.filter((x) => x.id !== id)), 800);
@@ -80,14 +87,13 @@ const QuickFire = () => {
     } else {
       setStatus("wrong");
       setCombo(0);
+      sfx.wrong();
       setTimeout(() => setStatus("idle"), 450);
     }
   };
 
   const useExtraTime = () => {
-    if (consumePowerup("extraTime")) {
-      setTime((t) => t + 15);
-    }
+    if (consumePowerup("extraTime")) setTime((t) => t + 15);
   };
   const useSkip = () => {
     if (status !== "idle") return;
@@ -102,13 +108,11 @@ const QuickFire = () => {
   };
   const useDoubler = () => {
     if (doubler) return;
-    if (consumePowerup("doubler")) {
-      setDoubler(true);
-    }
+    if (consumePowerup("doubler")) setDoubler(true);
   };
 
   const restart = () => {
-    setQuestion(generateQuestion(getState().selectedTables));
+    setQuestion(generateQuestion(getState().selectedTables, { op: getState().opMode }));
     setValue("");
     setStatus("idle");
     setTime(ROUND_SECONDS);
@@ -127,64 +131,62 @@ const QuickFire = () => {
     <div className="max-w-3xl mx-auto" data-testid="quickfire-page">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">
-            Mode 01
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+            Mode
           </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tighter">Quick-Fire</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg">Quick-Fire</h1>
         </div>
         <Link
           to="/"
-          className="brut-border bg-white px-3 py-2 font-bold text-xs uppercase tracking-widest hover:bg-zinc-100"
+          className="brut-border-soft surface px-3 py-1.5 font-semibold text-xs uppercase tracking-widest hover:surface-2 text-fg"
           data-testid="exit-game"
         >
-          <X size={14} className="inline -mt-0.5" /> Exit
+          <X size={13} className="inline -mt-0.5" /> Exit
         </Link>
       </div>
 
-      {/* HUD */}
-      <div className="bg-white brut-border brut-shadow p-5 mb-5">
-        <div className="flex items-center gap-3 justify-between">
-          <div className="flex items-center gap-2 brut-border bg-zinc-950 text-white px-3 py-2">
-            <Clock size={16} />
-            <span className="font-mono font-black text-xl tabular-nums" data-testid="hud-timer">
+      <div className="surface brut-border p-4 mb-4">
+        <div className="flex items-center gap-2 justify-between flex-wrap">
+          <div className="flex items-center gap-1.5 brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-2.5 py-1.5">
+            <Clock size={14} />
+            <span className="font-mono font-bold text-base tabular-nums" data-testid="hud-timer">
               {String(Math.max(0, time)).padStart(2, "0")}s
             </span>
           </div>
-          <div className="flex items-center gap-2 brut-border bg-blue-600 text-white px-3 py-2">
-            <span className="font-mono font-black text-xl tabular-nums" data-testid="hud-score">
+          <div className="flex items-center gap-1.5 brut-border bg-blue-600 text-white px-2.5 py-1.5">
+            <span className="font-mono font-bold text-base tabular-nums" data-testid="hud-score">
               {score}
             </span>
-            <span className="text-[10px] uppercase tracking-widest opacity-80">score</span>
+            <span className="text-[10px] uppercase tracking-widest opacity-90">score</span>
           </div>
           <motion.div
-            animate={combo > 0 ? { scale: [1, 1.06, 1] } : { scale: 1 }}
+            animate={combo > 0 ? { scale: [1, 1.05, 1] } : { scale: 1 }}
             transition={{ duration: 0.5, repeat: combo > 0 ? Infinity : 0 }}
-            className={`flex items-center gap-2 brut-border px-3 py-2 ${
-              combo > 0 ? "bg-amber-300" : "bg-white"
+            className={`flex items-center gap-1.5 brut-border px-2.5 py-1.5 ${
+              combo > 0 ? "bg-amber-300" : "surface"
             }`}
             data-testid="hud-combo"
           >
-            <Flame size={16} />
-            <span className="font-mono font-black text-xl tabular-nums">x{combo}</span>
+            <Flame size={14} className={combo > 0 ? "text-zinc-950" : "text-muted"} />
+            <span className={`font-mono font-bold text-base tabular-nums ${combo > 0 ? "text-zinc-950" : "text-fg"}`}>x{combo}</span>
           </motion.div>
-          <div className="hidden sm:flex items-center gap-2 brut-border bg-white px-3 py-2">
-            <Coins size={16} className="text-amber-600" />
-            <span className="font-mono font-black text-xl tabular-nums" data-testid="hud-run-coins">
+          <div className="hidden sm:flex items-center gap-1.5 brut-border surface px-2.5 py-1.5">
+            <Coins size={14} className="text-amber-500" />
+            <span className="font-mono font-bold text-base tabular-nums text-fg" data-testid="hud-run-coins">
               +{coinsEarned}
             </span>
           </div>
         </div>
-        <div className="mt-4 h-3 bg-zinc-200 brut-border overflow-hidden">
+        <div className="mt-3 h-2.5 surface-2 brut-border-soft overflow-hidden">
           <motion.div
-            className={`h-full ${frozen ? "bg-cyan-500" : "bg-zinc-950"}`}
+            className={`h-full ${frozen ? "bg-cyan-500" : "bg-zinc-900 dark:bg-zinc-100"}`}
             animate={{ width: `${pct}%` }}
             transition={{ duration: 0.4, ease: "linear" }}
           />
         </div>
       </div>
 
-      {/* Game area */}
-      <div className="bg-white brut-border brut-shadow-lg p-8 sm:p-10 relative">
+      <div className="surface brut-border brut-shadow p-7 sm:p-9 relative">
         <AnimatePresence>
           {poppers.map((p) => (
             <motion.div
@@ -193,9 +195,9 @@ const QuickFire = () => {
               animate={{ opacity: 0, y: -80, scale: 1.4 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.7 }}
-              className="absolute right-8 top-8 font-mono font-black text-2xl text-amber-600 pointer-events-none"
+              className="absolute right-6 top-6 font-mono font-bold text-xl text-amber-600 pointer-events-none"
             >
-              +{p.n} <Coins size={20} className="inline -mt-1" />
+              +{p.n} <Coins size={18} className="inline -mt-1" />
             </motion.div>
           ))}
         </AnimatePresence>
@@ -210,36 +212,36 @@ const QuickFire = () => {
             disabled={!running}
           />
         ) : (
-          <div className="text-center py-6" data-testid="quickfire-results">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold">
+          <div className="text-center py-4" data-testid="quickfire-results">
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
               Time
             </div>
-            <h2 className="text-5xl sm:text-6xl font-black tracking-tighter mt-2">UP.</h2>
-            <div className="grid grid-cols-3 gap-3 mt-8 max-w-md mx-auto">
-              <div className="brut-border p-3 bg-blue-600 text-white">
-                <div className="text-[10px] uppercase tracking-widest opacity-80">Score</div>
-                <div className="font-mono font-black text-3xl">{score}</div>
+            <h2 className="text-4xl sm:text-5xl font-black tracking-tighter mt-1 text-fg">UP.</h2>
+            <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-md mx-auto">
+              <div className="brut-border p-2.5 bg-blue-600 text-white">
+                <div className="text-[10px] uppercase tracking-widest opacity-90">Score</div>
+                <div className="font-mono font-bold text-2xl">{score}</div>
               </div>
-              <div className="brut-border p-3 bg-amber-300">
+              <div className="brut-border p-2.5 bg-amber-300 text-zinc-950">
                 <div className="text-[10px] uppercase tracking-widest">Coins</div>
-                <div className="font-mono font-black text-3xl">+{coinsEarned}</div>
+                <div className="font-mono font-bold text-2xl">+{coinsEarned}</div>
               </div>
-              <div className="brut-border p-3 bg-zinc-950 text-white">
+              <div className="brut-border p-2.5 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950">
                 <div className="text-[10px] uppercase tracking-widest opacity-70">Best Combo</div>
-                <div className="font-mono font-black text-3xl">x{combo}</div>
+                <div className="font-mono font-bold text-2xl">x{combo}</div>
               </div>
             </div>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <div className="mt-6 flex flex-wrap justify-center gap-2.5">
               <button
                 onClick={restart}
-                className="bg-zinc-950 text-white brut-border brut-shadow font-bold px-6 py-3 hover:bg-blue-600 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all uppercase tracking-wider"
+                className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold px-5 py-2.5 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all uppercase tracking-wider text-sm"
                 data-testid="play-again"
               >
                 Play Again
               </button>
               <button
                 onClick={() => navigate("/")}
-                className="bg-white brut-border brut-shadow font-bold px-6 py-3 hover:bg-zinc-100 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all uppercase tracking-wider"
+                className="surface brut-border brut-shadow font-bold px-5 py-2.5 hover:surface-2 active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all uppercase tracking-wider text-sm text-fg"
                 data-testid="back-home"
               >
                 Home
@@ -249,47 +251,12 @@ const QuickFire = () => {
         )}
       </div>
 
-      {/* Powerups */}
       {running && (
-        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="powerup-bar">
-          <PowerupBtn
-            testid="pu-extra-time"
-            label="+15s"
-            sub="Extra Time"
-            count={state.powerups.extraTime}
-            Icon={Plus}
-            onClick={useExtraTime}
-            color="bg-emerald-300"
-          />
-          <PowerupBtn
-            testid="pu-skip"
-            label="Skip"
-            sub="Question"
-            count={state.powerups.skip}
-            Icon={SkipForward}
-            onClick={useSkip}
-            color="bg-blue-300"
-          />
-          <PowerupBtn
-            testid="pu-freeze"
-            label={frozen ? "Active" : "Freeze"}
-            sub="5s pause"
-            count={state.powerups.freeze}
-            Icon={Snowflake}
-            onClick={useFreeze}
-            color="bg-cyan-300"
-            disabled={frozen}
-          />
-          <PowerupBtn
-            testid="pu-doubler"
-            label={doubler ? "x2 Active" : "x2 Coins"}
-            sub="this run"
-            count={state.powerups.doubler}
-            Icon={Sparkles}
-            onClick={useDoubler}
-            color="bg-amber-300"
-            disabled={doubler}
-          />
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5" data-testid="powerup-bar">
+          <PowerupBtn testid="pu-extra-time" label="+15s" sub="Extra Time" count={state.powerups.extraTime} Icon={Plus} onClick={useExtraTime} color="bg-emerald-300" />
+          <PowerupBtn testid="pu-skip" label="Skip" sub="Question" count={state.powerups.skip} Icon={SkipForward} onClick={useSkip} color="bg-blue-300" />
+          <PowerupBtn testid="pu-freeze" label={frozen ? "Active" : "Freeze"} sub="5s pause" count={state.powerups.freeze} Icon={Snowflake} onClick={useFreeze} color="bg-cyan-300" disabled={frozen} />
+          <PowerupBtn testid="pu-doubler" label={doubler ? "x2 Active" : "x2 Coins"} sub="this run" count={state.powerups.doubler} Icon={Sparkles} onClick={useDoubler} color="bg-amber-300" disabled={doubler} />
         </div>
       )}
     </div>
@@ -303,22 +270,22 @@ const PowerupBtn = ({ testid, label, sub, count, Icon, onClick, color, disabled 
       data-testid={testid}
       disabled={empty || disabled}
       onClick={onClick}
-      className={`brut-border brut-shadow-sm p-3 text-left flex items-center gap-3 transition-all ${
+      className={`brut-border brut-shadow-sm p-2.5 text-left flex items-center gap-2.5 transition-all text-zinc-950 ${
         empty || disabled
-          ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
-          : `${color} hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-none`
+          ? "surface-2 text-muted cursor-not-allowed"
+          : `${color} hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none`
       }`}
     >
-      <div className="brut-border bg-white w-10 h-10 grid place-items-center">
-        <Icon size={18} />
+      <div className="brut-border surface w-9 h-9 grid place-items-center text-fg">
+        <Icon size={16} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-black text-sm leading-none">{label}</div>
-        <div className="text-[10px] uppercase tracking-widest font-bold opacity-70 mt-1">
+        <div className="font-bold text-xs leading-none">{label}</div>
+        <div className="text-[9px] uppercase tracking-widest font-semibold opacity-70 mt-1">
           {sub}
         </div>
       </div>
-      <div className="font-mono font-black text-lg">{count || 0}</div>
+      <div className="font-mono font-bold text-sm">{count || 0}</div>
     </button>
   );
 };

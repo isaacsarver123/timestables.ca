@@ -3,40 +3,13 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, SkipForward, Snowflake, Sparkles, Coins } from "lucide-react";
 import { getState, subscribe, spendCoins, addPowerup } from "@/lib/storage";
+import { sfx } from "@/lib/sound";
 
 const ITEMS = [
-  {
-    key: "extraTime",
-    name: "Extra Time",
-    sub: "Adds 15 seconds to a timed run",
-    price: 30,
-    Icon: Plus,
-    color: "bg-emerald-300",
-  },
-  {
-    key: "skip",
-    name: "Skip",
-    sub: "Skip the current question",
-    price: 20,
-    Icon: SkipForward,
-    color: "bg-blue-300",
-  },
-  {
-    key: "freeze",
-    name: "Freeze",
-    sub: "Pauses the timer for 5 seconds",
-    price: 40,
-    Icon: Snowflake,
-    color: "bg-cyan-300",
-  },
-  {
-    key: "doubler",
-    name: "Coin Doubler",
-    sub: "x2 coins for the rest of the run",
-    price: 75,
-    Icon: Sparkles,
-    color: "bg-amber-300",
-  },
+  { key: "extraTime", name: "Extra Time", sub: "Adds 15 seconds to a timed run", price: 30, Icon: Plus, color: "bg-emerald-300 text-zinc-950" },
+  { key: "skip", name: "Skip", sub: "Skip the current question", price: 20, Icon: SkipForward, color: "bg-blue-300 text-zinc-950" },
+  { key: "freeze", name: "Freeze", sub: "Pauses the timer for 5 seconds", price: 40, Icon: Snowflake, color: "bg-cyan-300 text-zinc-950" },
+  { key: "doubler", name: "Coin Doubler", sub: "x2 coins for the rest of the run", price: 75, Icon: Sparkles, color: "bg-amber-300 text-zinc-950" },
 ];
 
 const Shop = () => {
@@ -50,33 +23,34 @@ const Shop = () => {
     }
     if (spendCoins(item.price)) {
       addPowerup(item.key, 1);
+      sfx.coin();
       toast.success(`+1 ${item.name}`);
     }
   };
 
   return (
-    <div className="space-y-8" data-testid="shop-page">
+    <div className="space-y-7" data-testid="shop-page">
       <div>
         <Link
           to="/"
-          className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-900 flex items-center gap-1"
+          className="text-xs font-semibold uppercase tracking-widest text-muted hover:text-fg flex items-center gap-1"
           data-testid="back-link"
         >
           <ArrowLeft size={12} /> Back
         </Link>
         <div className="flex items-end justify-between mt-2 flex-wrap gap-3">
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tighter">Powerup Shop</h1>
-          <div className="flex items-center gap-2 brut-border bg-amber-300 px-4 py-2.5">
-            <Coins size={18} />
-            <span className="font-mono font-black text-xl tabular-nums">{state.coins}</span>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg">Powerup Shop</h1>
+          <div className="flex items-center gap-2 brut-border bg-amber-300 text-zinc-950 px-3 py-2">
+            <Coins size={16} />
+            <span className="font-mono font-bold text-lg tabular-nums">{state.coins}</span>
           </div>
         </div>
-        <p className="mt-2 text-zinc-600 max-w-xl">
-          Spend coins on edge-cases. Powerups stack across runs and modes — buy ahead of a tough boss.
+        <p className="mt-2 text-muted max-w-xl text-sm">
+          Spend coins on edge-cases. Powerups stack across runs and modes.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {ITEMS.map((item) => {
           const Icon = item.Icon;
           const owned = state.powerups[item.key] || 0;
@@ -84,32 +58,32 @@ const Shop = () => {
           return (
             <div
               key={item.key}
-              className="bg-white brut-border brut-shadow p-6 flex flex-col"
+              className="surface brut-border brut-shadow p-5 flex flex-col"
               data-testid={`shop-item-${item.key}`}
             >
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className={`w-14 h-14 brut-border grid place-items-center ${item.color}`}>
-                  <Icon size={24} strokeWidth={2.5} />
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className={`w-12 h-12 brut-border grid place-items-center ${item.color}`}>
+                  <Icon size={20} strokeWidth={2.5} />
                 </div>
-                <div className="brut-border bg-zinc-100 px-2 py-1 text-[10px] uppercase tracking-widest font-bold">
+                <div className="brut-border-soft surface-2 px-2 py-1 text-[10px] uppercase tracking-widest font-bold text-fg">
                   Owned · {owned}
                 </div>
               </div>
-              <h3 className="text-2xl font-black tracking-tight">{item.name}</h3>
-              <p className="text-sm text-zinc-600 mt-1 flex-1">{item.sub}</p>
-              <div className="mt-5 flex items-center justify-between">
-                <div className="flex items-center gap-2 font-mono font-black text-2xl">
-                  <Coins size={20} className="text-amber-600" />
+              <h3 className="text-lg font-bold tracking-tight text-fg">{item.name}</h3>
+              <p className="text-sm text-muted mt-1 flex-1">{item.sub}</p>
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-mono font-bold text-xl text-fg">
+                  <Coins size={18} className="text-amber-500" />
                   {item.price}
                 </div>
                 <button
                   data-testid={`buy-${item.key}`}
                   onClick={() => buy(item)}
                   disabled={!can}
-                  className={`brut-border brut-shadow font-bold px-5 py-2.5 uppercase tracking-wider text-sm transition-all ${
+                  className={`brut-border brut-shadow font-bold px-4 py-2 uppercase tracking-wider text-xs transition-all ${
                     can
-                      ? "bg-zinc-950 text-white hover:bg-blue-600 active:translate-x-1 active:translate-y-1 active:shadow-none"
-                      : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none"
+                      : "surface-2 text-muted cursor-not-allowed"
                   }`}
                 >
                   Buy

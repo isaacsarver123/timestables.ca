@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const Question = forwardRef(function Question(
-  { question, value, onChange, onSubmit, status, autoFocus = true, disabled = false },
+  { question, value, onChange, onSubmit, status, autoFocus = true, disabled = false, hint },
   ref
 ) {
   const localRef = useRef(null);
@@ -27,35 +27,35 @@ export const Question = forwardRef(function Question(
       <AnimatePresence mode="wait">
         <motion.div
           key={question?.key}
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
-          transition={{ duration: 0.18 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.16 }}
           className="text-center"
         >
-          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-bold mb-3">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">
             Solve
           </div>
           <div
-            className="font-mono text-7xl sm:text-8xl font-black tracking-tight text-zinc-950 leading-none"
+            className="font-mono text-6xl sm:text-7xl font-black tracking-tight text-fg leading-none"
             data-testid="question-text"
           >
-            {question?.a} <span className="text-zinc-400">×</span> {question?.b}{" "}
-            <span className="text-zinc-400">=</span>
+            {question?.prompt} <span className="opacity-30">=</span>
           </div>
+          {hint && <div className="mt-3 text-xs text-muted font-mono">{hint}</div>}
         </motion.div>
       </AnimatePresence>
 
       <motion.div
         animate={
           status === "wrong"
-            ? { x: [-12, 12, -8, 8, -4, 4, 0] }
+            ? { x: [-8, 8, -6, 6, -3, 3, 0] }
             : status === "correct"
-            ? { scale: [1, 1.05, 1] }
+            ? { scale: [1, 1.04, 1] }
             : { x: 0, scale: 1 }
         }
-        transition={{ duration: 0.35 }}
-        className="mt-8 mx-auto max-w-sm"
+        transition={{ duration: 0.32 }}
+        className="mt-7 mx-auto max-w-sm"
       >
         <input
           ref={inputRef}
@@ -67,11 +67,11 @@ export const Question = forwardRef(function Question(
           disabled={disabled}
           placeholder="?"
           data-testid="answer-input"
-          className={`w-full brut-border bg-white font-mono text-5xl sm:text-6xl font-black text-center py-5 placeholder:text-zinc-300 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-colors ${
+          className={`w-full brut-border surface font-mono text-4xl sm:text-5xl font-bold text-center py-4 placeholder:opacity-30 text-fg focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-colors ${
             status === "correct"
-              ? "bg-emerald-100 border-emerald-700"
+              ? "bg-emerald-100 border-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-500"
               : status === "wrong"
-              ? "bg-red-100 border-red-700"
+              ? "bg-red-100 border-red-700 dark:bg-red-950/40 dark:border-red-500"
               : ""
           }`}
         />
@@ -81,7 +81,7 @@ export const Question = forwardRef(function Question(
         onClick={onSubmit}
         disabled={disabled}
         data-testid="submit-answer"
-        className="mt-5 mx-auto block bg-zinc-950 text-white brut-border brut-shadow font-bold text-base px-8 py-3 hover:bg-blue-600 active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
+        className="mt-4 mx-auto block bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold text-sm px-6 py-2.5 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       >
         Enter ↵
       </button>
