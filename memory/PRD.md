@@ -27,7 +27,19 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5 — Lessons + Gems + Profile/Friends (this round)
+### v5.1 — Lesson Path + CMS-driven Stripe + UX polish (this round)
+- **Admin credentials rotated** to `isaacsarver100@gmail.com` / `Isabella0412!`. Backend startup now also auto-deletes the legacy `isaac@timestables.ca` admin so we never end up with two admins.
+- **Duolingo-style Lesson Path** on `/lessons`: 4 themed units (Foundations / Division / Long Mult. / Long Div.) totalling 14 nodes laid out in a curved zig-zag. Sequential unlock, animated pulse on the next-up node, completion check-marks, locked padlocks, square boss nodes with a trophy. Progress persists to `localStorage` (`tt_lesson_path_v1`). The previous topic+difficulty selector is now a collapsible **Custom lesson** section below the path.
+- **Per-question countdown timer removed** from Lessons — completion (not speed) is the bar.
+- **"All" topic button removed** from the custom-lesson selector.
+- **CMS-editable wrong-answer flash duration** (`wrong_answer_flash_ms`, default 3000ms). New `lib/cms.js` cache + `getFlashMs()` helper consumed by Quick-Fire / Streak / Boss / Daily so the green "Answer was X" reveal duration is now site-wide tunable from Admin.
+- **CMS-driven Stripe key**: admins can paste their rotated `sk_live_…` / `sk_test_…` directly into Admin → CMS. Backend resolves the key dynamically via `_resolve_stripe_key()` (CMS first, `.env` fallback) and assigns `stripe.api_key` per-call via the new `await ensure_stripe()`. The full key is never echoed back to the browser — admin GET returns `stripe_secret_key=""` plus `stripe_secret_key_set: bool` and a masked preview (`sk_live_…WXYZ`). The public `/api/cms/public` strips the field entirely. Empty PUT preserves the existing key.
+- **HUD coins + gems pills** are now `<Link to="/shop">` with hover-lift and matching colour treatments — single tap from anywhere into the Shop.
+- **Footer auto-stamps to current build**: CMS now stores `app_version` (`v5`) and `footer_text` (`timestables.ca · v5`). Backend startup migrates any old `· v3` / `· v4` value forward so the footer stays accurate every release.
+- **Emergent badge removed** from `index.html`. Page title set to `timestables.ca · practice multiplication & division`.
+- **Signup pitch fixed**: "We charge $5 — flat" → "We charge **$5 a month** — flat" so the recurring nature is unambiguous.
+
+### v5 — Lessons + Gems + Profile/Friends (prior round)
 - **Lessons mode** (`/lessons`):
   - Lobby with topic multi-select (Multiplication / Division / Long Mult. / Long Div.) and "All" toggle (selecting "All" overrides others; tap again to clear).
   - 20 questions full-screen, top progress bar, 3 hard-question dots.

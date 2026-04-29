@@ -16,6 +16,7 @@ import {
 } from "@/lib/storage";
 import { generateQuestion } from "@/lib/game";
 import { sfx } from "@/lib/sound";
+import { getFlashMs } from "@/lib/cms";
 
 const Streak = () => {
   const navigate = useNavigate();
@@ -70,13 +71,13 @@ const Streak = () => {
       setStatus("wrong");
       sfx.wrong();
       if (getState().inputMode === "choices") setLastChoice(guess);
-      // Streak: show the correct answer for ~2s before ending the run, in
-      // typed mode. Choices mode already lingers via lastChoice highlighting.
+      // Streak: linger on the correct answer reveal for the CMS-configured
+      // flash duration (typed mode); choices mode keeps its short window.
       const isChoices = getState().inputMode === "choices";
       setTimeout(() => {
         setRunning(false);
         recordRunResult({ mode: "streak", score: combo, streak: combo });
-      }, isChoices ? 800 : 2000);
+      }, isChoices ? 800 : getFlashMs());
     }
   };
 

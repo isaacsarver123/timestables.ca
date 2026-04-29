@@ -11,6 +11,9 @@ import {
   Lightbulb,
   Gem,
   Zap,
+  Lock,
+  Star,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import Question from "@/components/Question";
@@ -26,18 +29,90 @@ import { useAuth } from "@/lib/auth";
 const TOPICS = [
   { key: "multiplication", label: "Multiplication", op: "mul", icon: "×" },
   { key: "division",       label: "Division",       op: "div", icon: "÷" },
-  { key: "long_mul",       label: "Long Mult.",     op: "mul", icon: "××" }, // long mode just uses 2-digit factors
+  { key: "long_mul",       label: "Long Mult.",     op: "mul", icon: "××" },
   { key: "long_div",       label: "Long Div.",      op: "div", icon: "÷÷" },
 ];
 
 const DIFF = {
-  easy:   { label: "Easy",   tables: [2, 3, 4, 5, 10], maxFactor: 10, timePerQ: 9 },
-  medium: { label: "Medium", tables: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxFactor: 12, timePerQ: 6 },
-  hard:   { label: "Hard",   tables: [3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], maxFactor: 18, timePerQ: 4 },
+  easy:   { label: "Easy",   tables: [2, 3, 4, 5, 10], maxFactor: 10 },
+  medium: { label: "Medium", tables: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], maxFactor: 12 },
+  hard:   { label: "Hard",   tables: [3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], maxFactor: 18 },
 };
 
 const TOTAL = 20;
 const HARD_DOTS = 3;
+
+// ───────── Duolingo-style lesson path ─────────
+// Each unit groups thematically related lessons. Within a unit, lessons unlock
+// sequentially; between units the next unit unlocks once the previous unit's
+// final lesson is cleared.
+const PATH = [
+  {
+    id: "u1",
+    title: "Foundations",
+    subtitle: "Easy multiplication",
+    accent: "bg-emerald-400",
+    accentSoft: "bg-emerald-100 dark:bg-emerald-950/30",
+    lessons: [
+      { id: "u1-l1", label: "Lesson 1", topics: ["multiplication"], difficulty: "easy" },
+      { id: "u1-l2", label: "Lesson 2", topics: ["multiplication"], difficulty: "easy" },
+      { id: "u1-l3", label: "Lesson 3", topics: ["multiplication"], difficulty: "medium" },
+      { id: "u1-boss", label: "Unit boss", topics: ["multiplication"], difficulty: "medium", boss: true },
+    ],
+  },
+  {
+    id: "u2",
+    title: "Division",
+    subtitle: "Splitting it up",
+    accent: "bg-cyan-400",
+    accentSoft: "bg-cyan-100 dark:bg-cyan-950/30",
+    lessons: [
+      { id: "u2-l1", label: "Lesson 1", topics: ["division"], difficulty: "easy" },
+      { id: "u2-l2", label: "Lesson 2", topics: ["division"], difficulty: "medium" },
+      { id: "u2-l3", label: "Mixed", topics: ["multiplication", "division"], difficulty: "medium" },
+      { id: "u2-boss", label: "Unit boss", topics: ["division"], difficulty: "hard", boss: true },
+    ],
+  },
+  {
+    id: "u3",
+    title: "Long Multiplication",
+    subtitle: "Two-digit territory",
+    accent: "bg-violet-400",
+    accentSoft: "bg-violet-100 dark:bg-violet-950/30",
+    lessons: [
+      { id: "u3-l1", label: "Lesson 1", topics: ["long_mul"], difficulty: "easy" },
+      { id: "u3-l2", label: "Lesson 2", topics: ["long_mul"], difficulty: "medium" },
+      { id: "u3-boss", label: "Unit boss", topics: ["long_mul"], difficulty: "hard", boss: true },
+    ],
+  },
+  {
+    id: "u4",
+    title: "Long Division",
+    subtitle: "The hard stuff",
+    accent: "bg-rose-400",
+    accentSoft: "bg-rose-100 dark:bg-rose-950/30",
+    lessons: [
+      { id: "u4-l1", label: "Lesson 1", topics: ["long_div"], difficulty: "easy" },
+      { id: "u4-l2", label: "Lesson 2", topics: ["long_div"], difficulty: "medium" },
+      { id: "u4-boss", label: "Unit boss", topics: ["long_div", "long_mul"], difficulty: "hard", boss: true },
+    ],
+  },
+];
+
+const PATH_FLAT = PATH.flatMap((u) => u.lessons.map((l) => ({ ...l, unitId: u.id })));
+const PROGRESS_KEY = "tt_lesson_path_v1";
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    return raw ? JSON.parse(raw) : { completed: {} };
+  } catch (_) {
+    return { completed: {} };
+  }
+}
+function saveProgress(p) {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); } catch (_) {}
+}
 
 // ───────── Build the run ─────────
 function buildRun(selectedTopics, diff) {
@@ -58,7 +133,7 @@ function buildRun(selectedTopics, diff) {
     const q = generateQuestion(cfg.tables, { minFactor, maxFactor, op: pick.op });
     out.push({ ...q, isHard: pick.isLong });
   }
-  // Deterministically pick HARD_DOTS positions to be flagged "hard" (last 6 quarter)
+  // Deterministically pick HARD_DOTS positions to be flagged "hard" (last 3).
   const hardIdx = new Set();
   for (let i = TOTAL - 1; hardIdx.size < HARD_DOTS && i >= 0; i--) {
     hardIdx.add(i);
@@ -68,7 +143,6 @@ function buildRun(selectedTopics, diff) {
 
 // ───────── Wrong-answer Duolingo-style explanation ─────────
 function explain(q) {
-  // Use the typed tableTips library — pull a "trick" or "formula".
   const factor = q.op === "mul" ? Math.max(q.a, q.b) : q.a;
   const tips = tableTips(factor);
   const explanation =
@@ -83,34 +157,36 @@ export default function Lessons() {
   const [phase, setPhase] = useState("lobby"); // lobby | play | result
   const [topics, setTopics] = useState(["multiplication"]);
   const [difficulty, setDifficulty] = useState("medium");
+  const [activeNodeId, setActiveNodeId] = useState(null); // the path lesson currently being played
   const [run, setRun] = useState([]);
   const [idx, setIdx] = useState(0);
   const [value, setValue] = useState("");
   const [status, setStatus] = useState("idle"); // idle | correct | wrong | reviewing
   const [correct, setCorrect] = useState(0);
   const [hardCorrect, setHardCorrect] = useState(0);
-  const [time, setTime] = useState(DIFF.medium.timePerQ);
   const [explanation, setExplanation] = useState(null);
   const [result, setResult] = useState(null); // { xp_earned, gems_earned, ... }
+  const [progress, setProgress] = useState(loadProgress);
   const startedAt = useRef(0);
-  const tickRef = useRef(null);
 
   const { refresh } = useAuth();
   const guard = useNavGuard(phase === "play");
   const nav = useNavigate();
 
-  const cfg = DIFF[difficulty];
   const q = run[idx];
+
+  // ── unlock logic ──────────────────────────────────────────────────────────
+  // The first lesson is always unlocked. After that, a node unlocks once the
+  // previous flat-path node is completed.
+  const isUnlocked = (nodeId) => {
+    const i = PATH_FLAT.findIndex((n) => n.id === nodeId);
+    if (i <= 0) return true;
+    return !!progress.completed[PATH_FLAT[i - 1].id];
+  };
+  const isCompleted = (nodeId) => !!progress.completed[nodeId];
 
   // ── lobby helpers ─────────────────────────────────────────────────────────
   const toggleTopic = (key) => {
-    if (key === "all") {
-      // tap "All" → run all four; tap again to clear back to multiplication.
-      const allKeys = TOPICS.map((t) => t.key);
-      const isAllOn = topics.length === TOPICS.length;
-      setTopics(isAllOn ? ["multiplication"] : allKeys);
-      return;
-    }
     const has = topics.includes(key);
     if (has) {
       const next = topics.filter((t) => t !== key);
@@ -119,10 +195,12 @@ export default function Lessons() {
       setTopics([...topics, key]);
     }
   };
-  const isAllOn = topics.length === TOPICS.length;
 
-  const startLesson = () => {
-    const built = buildRun(topics, difficulty);
+  const startLesson = (opts) => {
+    const useTopics = opts?.topics || topics;
+    const useDiff = opts?.difficulty || difficulty;
+    const built = buildRun(useTopics, useDiff);
+    setActiveNodeId(opts?.nodeId || null);
     setRun(built);
     setIdx(0);
     setValue("");
@@ -130,18 +208,14 @@ export default function Lessons() {
     setHardCorrect(0);
     setStatus("idle");
     setExplanation(null);
-    setTime(DIFF[difficulty].timePerQ);
     setPhase("play");
     startedAt.current = performance.now();
   };
 
-  // ── per-question timer ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (phase !== "play" || status !== "idle") return;
-    if (time <= 0) { onWrong(); return; }
-    tickRef.current = setTimeout(() => setTime((t) => t - 1), 1000);
-    return () => clearTimeout(tickRef.current);
-  }, [time, status, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const startPathLesson = (node) => {
+    if (!isUnlocked(node.id)) return;
+    startLesson({ topics: node.topics, difficulty: node.difficulty, nodeId: node.id });
+  };
 
   // ── submit / advance ──────────────────────────────────────────────────────
   const submit = () => {
@@ -176,13 +250,19 @@ export default function Lessons() {
       setIdx(idx + 1);
       setValue("");
       setStatus("idle");
-      setTime(DIFF[difficulty].timePerQ);
     }
   };
 
   const finishRun = async () => {
     const seconds = Math.round((performance.now() - startedAt.current) / 1000);
     setPhase("result");
+    // Mark this path node complete (not gated on accuracy — the user finished
+    // 20 questions, that's the bar).
+    if (activeNodeId) {
+      const next = { ...progress, completed: { ...progress.completed, [activeNodeId]: { at: Date.now(), correct, total: TOTAL } } };
+      setProgress(next);
+      saveProgress(next);
+    }
     try {
       const { data } = await api.post("/lessons/finish", {
         topics, difficulty,
@@ -194,9 +274,6 @@ export default function Lessons() {
       setResult(data);
       if (data.xp_earned > 0) addCoinsAndXp(0, data.xp_earned);
       if (data.gems_earned > 0) {
-        // bump gems on the auth user
-        await api.post("/gems/grant", { delta: data.gems_earned, reason: "perfect_lesson" })
-          .catch(() => {/* server already credited via lessons/finish; this is just to refresh */});
         await refresh();
         toast.success(`Perfect lesson! +${data.gems_earned} gems`);
       }
@@ -216,74 +293,84 @@ export default function Lessons() {
           <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Mode</div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg">Lesson</h1>
           <p className="text-sm text-muted mt-1.5">
-            Pick what you want to practise — 20 questions, mistakes get a Duolingo-style explanation.
+            Follow the path, or build your own at the bottom. 20 questions per lesson — mistakes get a Duolingo-style explanation.
           </p>
         </div>
 
-        {/* Topic chips */}
-        <section className="mb-6">
-          <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">Topics</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {TOPICS.map((t) => {
-              const on = !isAllOn && topics.includes(t.key);
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => toggleTopic(t.key)}
-                  data-testid={`lessons-topic-${t.key.replace("_", "-")}`}
-                  className={`brut-border p-3 text-left transition-colors ${
-                    on
-                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
-                      : "surface-2 text-fg hover:surface"
-                  }`}
-                >
-                  <div className="font-mono font-black text-xl">{t.icon}</div>
-                  <div className="text-xs font-bold mt-1">{t.label}</div>
-                </button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => toggleTopic("all")}
-            data-testid="lessons-topic-all"
-            className={`mt-2 w-full brut-border-soft px-3 py-2 text-xs font-bold uppercase tracking-wider ${
-              isAllOn
-                ? "bg-amber-300 text-zinc-950"
-                : "surface-2 text-muted hover:text-fg"
-            }`}
-          >
-            All {isAllOn && "· on"}
-          </button>
-        </section>
+        {/* Path */}
+        <LessonPath
+          path={PATH}
+          isUnlocked={isUnlocked}
+          isCompleted={isCompleted}
+          onStart={startPathLesson}
+        />
 
-        {/* Difficulty */}
-        <section className="mb-7">
-          <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">Difficulty</h2>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(DIFF).map(([k, v]) => (
-              <button
-                key={k}
-                onClick={() => setDifficulty(k)}
-                data-testid={`lessons-difficulty-${k}`}
-                className={`brut-border px-3 py-2.5 text-xs font-bold uppercase tracking-wider ${
-                  difficulty === k
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
-                    : "surface-2 text-fg hover:surface"
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-        </section>
+        {/* Custom lesson — collapsed below the path */}
+        <details className="mt-10 brut-border surface" data-testid="lessons-custom">
+          <summary className="cursor-pointer px-4 py-3 flex items-center justify-between font-bold text-sm uppercase tracking-wider text-fg hover:bg-blue-50 dark:hover:bg-blue-950/30">
+            <span className="flex items-center gap-2">
+              <Sparkles size={14} className="text-amber-500" /> Custom lesson
+            </span>
+            <span className="text-[10px] text-muted uppercase tracking-wider font-medium">
+              Pick topics + difficulty
+            </span>
+          </summary>
+          <div className="border-t border-zinc-300 dark:border-zinc-700 p-5 space-y-6">
+            {/* Topic chips */}
+            <section>
+              <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">Topics</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {TOPICS.map((t) => {
+                  const on = topics.includes(t.key);
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => toggleTopic(t.key)}
+                      data-testid={`lessons-topic-${t.key.replace("_", "-")}`}
+                      className={`brut-border p-3 text-left transition-colors ${
+                        on
+                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                          : "surface-2 text-fg hover:surface"
+                      }`}
+                    >
+                      <div className="font-mono font-black text-xl">{t.icon}</div>
+                      <div className="text-xs font-bold mt-1">{t.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-        <button
-          onClick={startLesson}
-          data-testid="lessons-start"
-          className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold uppercase tracking-wider text-sm py-3.5 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all flex items-center justify-center gap-2"
-        >
-          Start lesson <ArrowRight size={16} />
-        </button>
+            {/* Difficulty */}
+            <section>
+              <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-3">Difficulty</h2>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.entries(DIFF).map(([k, v]) => (
+                  <button
+                    key={k}
+                    onClick={() => setDifficulty(k)}
+                    data-testid={`lessons-difficulty-${k}`}
+                    className={`brut-border px-3 py-2.5 text-xs font-bold uppercase tracking-wider ${
+                      difficulty === k
+                        ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                        : "surface-2 text-fg hover:surface"
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <button
+              onClick={() => startLesson()}
+              data-testid="lessons-start"
+              className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold uppercase tracking-wider text-sm py-3.5 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              Start custom lesson <ArrowRight size={16} />
+            </button>
+          </div>
+        </details>
       </div>
     );
   }
@@ -335,13 +422,6 @@ export default function Lessons() {
               />
             ))}
           </div>
-        </div>
-
-        {/* Per-question timer pill */}
-        <div className="mb-3 text-center">
-          <span className="font-mono text-xs text-muted tabular-nums" data-testid="lesson-timer">
-            {time}s
-          </span>
         </div>
 
         {/* Explanation overlay */}
@@ -479,3 +559,100 @@ const Stat = ({ label, value }) => (
     <div className="font-bold text-fg text-xl tabular-nums mt-0.5">{value}</div>
   </div>
 );
+
+// ───────── Duolingo-style path ─────────
+// Renders units stacked vertically, each unit with its own colour band and a
+// zig-zag of circular nodes inside it. The next-up node gets a soft pulse so
+// the user always sees where to click.
+function LessonPath({ path, isUnlocked, isCompleted, onStart }) {
+  // Find the very first unlocked-but-not-yet-completed node across the entire
+  // path so we can highlight it.
+  let nextNodeId = null;
+  for (const u of path) {
+    for (const l of u.lessons) {
+      if (!nextNodeId && isUnlocked(l.id) && !isCompleted(l.id)) nextNodeId = l.id;
+    }
+  }
+
+  return (
+    <div className="space-y-8" data-testid="lesson-path">
+      {path.map((unit, ui) => {
+        // A unit is "active" if any of its lessons are unlocked.
+        const unitUnlocked = unit.lessons.some((l) => isUnlocked(l.id));
+        const unitDone = unit.lessons.every((l) => isCompleted(l.id));
+        return (
+          <div key={unit.id} data-testid={`lesson-path-unit-${unit.id}`}>
+            <div className={`brut-border ${unit.accentSoft} px-4 py-3 mb-5 flex items-center justify-between`}>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+                  Unit {ui + 1}{unitDone ? " · cleared" : !unitUnlocked ? " · locked" : ""}
+                </div>
+                <div className="font-bold text-fg text-base">{unit.title}</div>
+                <div className="text-xs text-muted">{unit.subtitle}</div>
+              </div>
+              <div className={`w-9 h-9 brut-border ${unit.accent} grid place-items-center text-zinc-950`}>
+                {unitDone ? <Trophy size={16} /> : !unitUnlocked ? <Lock size={14} /> : <Star size={14} />}
+              </div>
+            </div>
+
+            <div className="relative pb-2">
+              {unit.lessons.map((lesson, i) => {
+                const unlocked = isUnlocked(lesson.id);
+                const done = isCompleted(lesson.id);
+                const isNext = lesson.id === nextNodeId;
+                // Zig-zag horizontal offset (-1, 0, 1, 0, -1, …)
+                const offset = ((i % 4) - 1.5) * 64; // px
+                return (
+                  <div
+                    key={lesson.id}
+                    className="flex flex-col items-center mb-7"
+                    style={{ transform: `translateX(${offset}px)` }}
+                  >
+                    <button
+                      onClick={() => onStart(lesson)}
+                      disabled={!unlocked}
+                      data-testid={`lesson-path-node-${lesson.id}`}
+                      aria-label={`${unit.title} · ${lesson.label}${done ? " (done)" : !unlocked ? " (locked)" : ""}`}
+                      className={`relative w-20 h-20 sm:w-[88px] sm:h-[88px] brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
+                        done
+                          ? `${unit.accent} text-zinc-950`
+                          : unlocked
+                          ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
+                          : "surface-2 text-muted cursor-not-allowed"
+                      } ${lesson.boss ? "rounded-md" : "rounded-full"}`}
+                    >
+                      {done ? (
+                        <CheckCircle2 size={28} strokeWidth={3} />
+                      ) : !unlocked ? (
+                        <Lock size={22} />
+                      ) : lesson.boss ? (
+                        <Trophy size={26} />
+                      ) : (
+                        <Star size={26} strokeWidth={2.5} />
+                      )}
+                      {isNext && (
+                        <motion.span
+                          className={`absolute inset-0 rounded-full ${lesson.boss ? "rounded-md" : "rounded-full"} ring-4 ring-amber-400`}
+                          animate={{ scale: [1, 1.1, 1], opacity: [0.7, 0.2, 0.7] }}
+                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                          style={{ pointerEvents: "none" }}
+                        />
+                      )}
+                    </button>
+                    <div className="text-[10px] uppercase tracking-[0.2em] font-bold mt-2 text-muted">
+                      {lesson.label}
+                      {lesson.boss && <span className="ml-1 text-amber-600 dark:text-amber-400">★</span>}
+                    </div>
+                    <div className="text-[10px] text-muted font-mono">
+                      {DIFF[lesson.difficulty]?.label}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

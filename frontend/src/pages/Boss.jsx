@@ -16,6 +16,7 @@ import {
 } from "@/lib/storage";
 import { bossConfig, bossName, generateQuestion } from "@/lib/game";
 import { sfx } from "@/lib/sound";
+import { getFlashMs } from "@/lib/cms";
 
 const MAX_LIVES = 3;
 
@@ -79,8 +80,8 @@ const Boss = () => {
         setOutcome("lose");
         setPhase("result");
       } else {
-        // 2s lets the user read "Answer was: X" before the next question.
-        setTimeout(newQ, 1900);
+        // Linger on the answer reveal for the CMS-configured duration.
+        setTimeout(newQ, getFlashMs());
       }
       return nl;
     });

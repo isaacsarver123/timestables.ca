@@ -16,6 +16,7 @@ import {
 } from "@/lib/storage";
 import { generateQuestion } from "@/lib/game";
 import { sfx } from "@/lib/sound";
+import { getFlashMs } from "@/lib/cms";
 
 const ROUND_SECONDS = 60;
 
@@ -96,8 +97,8 @@ const QuickFire = () => {
         setLastChoice(guess);
         setTimeout(() => next(), 900);
       } else {
-        // Show correct answer for ~2s — long enough to actually read.
-        setTimeout(() => next(), 1900);
+        // Show correct answer for the CMS-configured flash duration.
+        setTimeout(() => next(), getFlashMs());
       }
     }
   };

@@ -28,8 +28,8 @@ MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALG = "HS256"
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "isaac@timestables.ca").lower()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin12345")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "isaacsarver100@gmail.com").lower()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Isabella0412!")
 ADMIN_NAME = os.environ.get("ADMIN_NAME", "Isaac")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
@@ -166,11 +166,30 @@ async def get_admin_user(user: dict = Depends(get_token_user)) -> dict:
 
 
 def require_stripe():
+    """DEPRECATED: prefer `await ensure_stripe()`. Still here for any legacy callers."""
     if not STRIPE_SECRET_KEY:
         raise HTTPException(
             status_code=503,
-            detail="Stripe not configured. Add STRIPE_SECRET_KEY to backend/.env."
+            detail="Stripe not configured. Add the Secret Key in Admin → CMS."
         )
+
+
+async def _resolve_stripe_key() -> str:
+    """Prefer CMS-stored key (so admins can rotate via the dashboard); fall back to .env."""
+    doc = await db.cms.find_one({"_id": "site"}, {"stripe_secret_key": 1}) or {}
+    cms_key = (doc.get("stripe_secret_key") or "").strip()
+    return cms_key or STRIPE_SECRET_KEY
+
+
+async def ensure_stripe() -> str:
+    key = await _resolve_stripe_key()
+    if not key:
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe not configured. Paste your Secret Key in Admin → CMS."
+        )
+    stripe.api_key = key
+    return key
 
 
 # ------------------------------------------------------------------ MODELS
@@ -195,6 +214,7 @@ class CMSIn(BaseModel):
     support_email: Optional[str] = None
     support_phone: Optional[str] = None
     footer_text: Optional[str] = None
+    app_version: Optional[str] = None
     signup_welcome_title: Optional[str] = None
     signup_welcome_body: Optional[str] = None
     signup_pitch_a_title: Optional[str] = None
@@ -203,6 +223,8 @@ class CMSIn(BaseModel):
     signup_pitch_b_body: Optional[str] = None
     login_welcome_title: Optional[str] = None
     login_welcome_body: Optional[str] = None
+    wrong_answer_flash_ms: Optional[int] = None
+    stripe_secret_key: Optional[str] = None
 
 
 class UserEditIn(BaseModel):
@@ -253,6 +275,11 @@ async def on_startup():
     await db.user_state.create_index("user_id", unique=True)
     await db.login_attempts.create_index("identifier")
     # Seed admin
+    # Migration: drop legacy admin if present so we don't end up with two admins.
+    legacy_admins = ["isaac@timestables.ca"]
+    for legacy in legacy_admins:
+        if legacy != ADMIN_EMAIL:
+            await db.users.delete_one({"email": legacy, "role": "admin"})
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
     now = datetime.now(timezone.utc)
     if not existing:
@@ -282,15 +309,18 @@ async def on_startup():
         "announcement_active": False,
         "support_email": "isaacsarver@icloud.com",
         "support_phone": "825-962-3425",
-        "footer_text": "timestables.ca · v3",
+        "app_version": "v5",
+        "footer_text": "timestables.ca · v5",
         "signup_welcome_title": "Welcome.",
         "signup_welcome_body": "2-day free trial, no card required. After that it's $5 CAD/month — cancel anytime, no funny business.",
         "signup_pitch_a_title": "No $99/mo nonsense.",
-        "signup_pitch_a_body": "Other sites charge ridiculous fees for the same thing. We charge $5 — flat. That keeps the servers on and the developers fed. That's it.",
+        "signup_pitch_a_body": "Other sites charge ridiculous fees for the same thing. We charge $5 a month — flat. That keeps the servers on and the developers fed. That's it.",
         "signup_pitch_b_title": "No card during the trial.",
         "signup_pitch_b_body": "You only put a card in if you decide to keep going after 2 days. We'll never charge you by surprise.",
         "login_welcome_title": "Welcome back.",
         "login_welcome_body": "Pick up where you left off. Your progress syncs across every device you sign in on.",
+        "wrong_answer_flash_ms": 3000,
+        "stripe_secret_key": "",
     }
     if not cms:
         await db.cms.insert_one({"_id": "site", **cms_defaults, "updated_at": now.isoformat()})
@@ -299,6 +329,13 @@ async def on_startup():
         missing = {k: v for k, v in cms_defaults.items() if k not in cms}
         if missing:
             await db.cms.update_one({"_id": "site"}, {"$set": missing})
+        # Auto-bump footer/version stamp when it still points at an older build.
+        cur_footer = (cms.get("footer_text") or "").strip()
+        if cur_footer in ("timestables.ca · v3", "timestables.ca · v4"):
+            await db.cms.update_one(
+                {"_id": "site"},
+                {"$set": {"footer_text": cms_defaults["footer_text"], "app_version": cms_defaults["app_version"]}},
+            )
 
 
 @app.on_event("shutdown")
@@ -309,8 +346,9 @@ async def on_shutdown():
 # -------------------------------------------------------- HEALTH / CMS
 @api.get("/")
 async def root():
+    key = await _resolve_stripe_key()
     return {"app": "timestables.ca", "status": "ok",
-            "stripe_configured": bool(STRIPE_SECRET_KEY)}
+            "stripe_configured": bool(key)}
 
 
 @api.get("/cms/public")
@@ -318,6 +356,8 @@ async def cms_public():
     doc = await db.cms.find_one({"_id": "site"}) or {}
     doc.pop("_id", None)
     doc.pop("updated_at", None)
+    # Never expose secrets through the public endpoint.
+    doc.pop("stripe_secret_key", None)
     return doc
 
 
@@ -489,7 +529,7 @@ async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
 
 @api.post("/stripe/checkout")
 async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)):
-    require_stripe()
+    await ensure_stripe()
     body = await request.json()
     origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
     customer_id = await _ensure_stripe_customer(user)
@@ -531,7 +571,7 @@ async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)
 
 @api.get("/stripe/status/{session_id}")
 async def stripe_status(session_id: str, user: dict = Depends(get_token_user)):
-    require_stripe()
+    await ensure_stripe()
     sess = stripe.checkout.Session.retrieve(session_id)
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     if tx and tx.get("payment_status") != "paid" and sess.payment_status == "paid":
@@ -556,7 +596,7 @@ async def stripe_status(session_id: str, user: dict = Depends(get_token_user)):
 
 @api.post("/stripe/portal")
 async def stripe_portal(request: Request, user: dict = Depends(get_token_user)):
-    require_stripe()
+    await ensure_stripe()
     body = await request.json()
     origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
     customer_id = (user.get("subscription") or {}).get("customer_id")
@@ -573,7 +613,7 @@ async def stripe_portal(request: Request, user: dict = Depends(get_token_user)):
 
 @api.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    require_stripe()
+    key = await ensure_stripe()
     payload = await request.body()
     sig = request.headers.get("Stripe-Signature", "")
     try:
@@ -581,7 +621,7 @@ async def stripe_webhook(request: Request):
             event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
         else:
             import json as _json
-            event = stripe.Event.construct_from(_json.loads(payload), STRIPE_SECRET_KEY)
+            event = stripe.Event.construct_from(_json.loads(payload), key)
     except Exception as e:
         log.error("Webhook parse failed: %s", e)
         raise HTTPException(status_code=400, detail="Invalid webhook")
@@ -1000,21 +1040,46 @@ async def admin_users_delete(user_id: str, admin: dict = Depends(get_admin_user)
     return {"deleted": True, "id": str(oid)}
 
 
+def _mask_stripe_for_admin(doc: dict) -> dict:
+    """Return doc with `stripe_secret_key` swapped for a masked preview so the
+    full live key is never re-shipped to the browser. The Admin UI uses the
+    `stripe_secret_key_set` flag to render an "already-set" badge."""
+    out = dict(doc)
+    raw = (out.get("stripe_secret_key") or "").strip()
+    out["stripe_secret_key_set"] = bool(raw)
+    if raw:
+        out["stripe_secret_key"] = ""  # never echo the real key back
+        out["stripe_secret_key_preview"] = (
+            raw[:7] + "…" + raw[-4:] if len(raw) > 14 else "set"
+        )
+    else:
+        out["stripe_secret_key"] = ""
+        out["stripe_secret_key_preview"] = ""
+    return out
+
+
 @api.get("/admin/cms")
 async def admin_cms_get(_: dict = Depends(get_admin_user)):
     doc = await db.cms.find_one({"_id": "site"}) or {}
     doc.pop("_id", None)
-    return doc
+    return _mask_stripe_for_admin(doc)
 
 
 @api.put("/admin/cms")
 async def admin_cms_put(body: CMSIn, _: dict = Depends(get_admin_user)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Only persist a Stripe key when admin actually typed a new one.
+    if "stripe_secret_key" in upd:
+        new_key = (upd["stripe_secret_key"] or "").strip()
+        if not new_key:
+            upd.pop("stripe_secret_key", None)  # blank == leave existing alone
+        else:
+            upd["stripe_secret_key"] = new_key
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.cms.update_one({"_id": "site"}, {"$set": upd}, upsert=True)
     doc = await db.cms.find_one({"_id": "site"}) or {}
     doc.pop("_id", None)
-    return doc
+    return _mask_stripe_for_admin(doc)
 
 
 # ------------------------------------------------------------------ MOUNT

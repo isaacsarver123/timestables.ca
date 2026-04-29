@@ -25,6 +25,9 @@ import {
   Pencil,
   Trash2,
   X,
+  KeyRound,
+  Timer,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, formatErr } from "@/lib/api";
@@ -452,6 +455,62 @@ function CmsTab() {
   if (!doc) return <div className="text-muted text-sm">Loading CMS…</div>;
   return (
     <div className="space-y-4 max-w-2xl" data-testid="admin-cms">
+      <CmsSection title={<span className="flex items-center gap-2"><KeyRound size={12} /> Stripe (live integration)</span>}>
+        <div className="text-xs text-muted leading-relaxed">
+          Paste your <span className="font-mono text-fg">sk_live_…</span> or
+          <span className="font-mono text-fg"> sk_test_…</span> Secret Key. Saved
+          here, it overrides the value in <span className="font-mono">backend/.env</span>
+          so you can rotate without redeploying. Leave blank to keep the existing key.
+        </div>
+        {doc.stripe_secret_key_set ? (
+          <div className="brut-border-soft surface-2 px-3 py-2 flex items-center justify-between gap-2 text-xs" data-testid="cms-stripe-set-row">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">Key set</span>
+            <span className="font-mono text-muted">{doc.stripe_secret_key_preview || "••••"}</span>
+          </div>
+        ) : (
+          <div className="brut-border-soft bg-amber-100 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 font-bold" data-testid="cms-stripe-empty-row">
+            No Stripe key on file — checkout will return 503 until you paste one.
+          </div>
+        )}
+        <Field
+          label={doc.stripe_secret_key_set ? "Replace Stripe Secret Key" : "Stripe Secret Key"}
+          type="password"
+          value={doc.stripe_secret_key || ""}
+          onChange={(v) => set("stripe_secret_key", v)}
+          testid="cms-stripe-secret-key"
+          placeholder="sk_live_… (paste only when rotating)"
+        />
+      </CmsSection>
+
+      <CmsSection title={<span className="flex items-center gap-2"><Timer size={12} /> Game pacing</span>}>
+        <Field
+          label="Wrong-answer flash duration (ms)"
+          type="number"
+          value={doc.wrong_answer_flash_ms ?? 3000}
+          onChange={(v) => set("wrong_answer_flash_ms", parseInt(v, 10) || 0)}
+          testid="cms-wrong-flash-ms"
+        />
+        <div className="text-[11px] text-muted">
+          How long the green "Answer was X" card stays on screen after a wrong typed
+          answer in Quick-Fire, Streak, Boss and Daily. Default 3000ms.
+        </div>
+      </CmsSection>
+
+      <CmsSection title={<span className="flex items-center gap-2"><Tag size={12} /> Build / version</span>}>
+        <Field
+          label="App version label"
+          value={doc.app_version || ""}
+          onChange={(v) => set("app_version", v)}
+          testid="cms-app-version"
+        />
+        <Field
+          label="Footer text"
+          value={doc.footer_text || ""}
+          onChange={(v) => set("footer_text", v)}
+          testid="cms-footer-text-top"
+        />
+      </CmsSection>
+
       <CmsSection title="Home hero">
         <Field label="Title" value={doc.hero_title || ""} onChange={(v) => set("hero_title", v)} testid="cms-hero-title" />
         <Field label="Subtitle" value={doc.hero_subtitle || ""} onChange={(v) => set("hero_subtitle", v)} testid="cms-hero-subtitle" multiline />
@@ -478,10 +537,6 @@ function CmsTab() {
       <CmsSection title="Support / contact">
         <Field label="Support email" type="email" value={doc.support_email || ""} onChange={(v) => set("support_email", v)} testid="cms-support-email" />
         <Field label="Support phone" value={doc.support_phone || ""} onChange={(v) => set("support_phone", v)} testid="cms-support-phone" />
-      </CmsSection>
-
-      <CmsSection title="Footer">
-        <Field label="Footer text" value={doc.footer_text || ""} onChange={(v) => set("footer_text", v)} testid="cms-footer-text" />
       </CmsSection>
 
       <CmsSection title={<span className="flex items-center gap-2"><Megaphone size={12} /> Announcement bar</span>}>
@@ -516,7 +571,7 @@ const CmsSection = ({ title, children }) => (
   </div>
 );
 
-const Field = ({ label, value, onChange, testid, multiline, type = "text" }) => (
+const Field = ({ label, value, onChange, testid, multiline, type = "text", placeholder = "" }) => (
   <label className="block">
     <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1.5">{label}</div>
     {multiline ? (
@@ -525,6 +580,7 @@ const Field = ({ label, value, onChange, testid, multiline, type = "text" }) => 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         data-testid={testid}
+        placeholder={placeholder}
         className="w-full brut-border surface-2 text-fg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-y"
       />
     ) : (
@@ -533,6 +589,8 @@ const Field = ({ label, value, onChange, testid, multiline, type = "text" }) => 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         data-testid={testid}
+        placeholder={placeholder}
+        autoComplete={type === "password" ? "new-password" : undefined}
         className="w-full brut-border surface-2 text-fg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
       />
     )}

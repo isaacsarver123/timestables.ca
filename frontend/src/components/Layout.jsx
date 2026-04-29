@@ -29,17 +29,23 @@ import {
 import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
 import TrialBanner from "@/components/TrialBanner";
-import { api } from "@/lib/api";
+import { loadCms, subscribeCms, getCmsCached } from "@/lib/cms";
 
 export const Layout = ({ children }) => {
   const [state, setState] = useState(getState());
   const location = useLocation();
   const { user } = useAuth();
-  const [footerText, setFooterText] = useState("timestables.ca · v3");
+  const [footerText, setFooterText] = useState(
+    () => (getCmsCached()?.footer_text || "timestables.ca · v5")
+  );
   useEffect(() => {
-    api.get("/cms/public").then((r) => {
-      if (r.data?.footer_text) setFooterText(r.data.footer_text);
-    }).catch(() => {});
+    loadCms().then((d) => {
+      if (d?.footer_text) setFooterText(d.footer_text);
+    });
+    const off = subscribeCms((d) => {
+      if (d?.footer_text) setFooterText(d.footer_text);
+    });
+    return () => off();
   }, []);
 
   useEffect(() => {
@@ -148,25 +154,30 @@ export const Layout = ({ children }) => {
             )}
             {isAuthed && (
               <>
-                <div
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
+                <Link
+                  to="/shop"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:-translate-y-px transition-all cursor-pointer"
                   data-testid="hud-coins"
+                  title="Coins · go to Shop"
+                  aria-label="Open Shop"
                 >
                   <Coins size={14} className="text-amber-500" />
                   <span className="font-mono text-sm tabular-nums text-fg font-semibold">
                     {state.coins}
                   </span>
-                </div>
-                <div
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
+                </Link>
+                <Link
+                  to="/shop"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface hover:bg-cyan-100 dark:hover:bg-cyan-950/40 hover:-translate-y-px transition-all cursor-pointer"
                   data-testid="hud-gems"
-                  title="Gems"
+                  title="Gems · go to Shop"
+                  aria-label="Open Shop"
                 >
                   <Gem size={14} className="text-cyan-500" />
                   <span className="font-mono text-sm tabular-nums text-fg font-semibold">
                     {user?.gems ?? 0}
                   </span>
-                </div>
+                </Link>
                 <div
                   className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface min-w-[68px]"
                   data-testid="hud-level"

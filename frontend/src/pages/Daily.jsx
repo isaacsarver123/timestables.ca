@@ -14,6 +14,7 @@ import {
 } from "@/lib/storage";
 import { dailyQuestions } from "@/lib/game";
 import { sfx } from "@/lib/sound";
+import { getFlashMs } from "@/lib/cms";
 
 const TODAY = () => new Date().toISOString().slice(0, 10);
 const PRETTY_DATE = () =>
@@ -71,7 +72,7 @@ const Daily = () => {
         setStatus("idle");
         startTs.current = performance.now();
       }
-    }, correct ? 350 : 1900);
+    }, correct ? 350 : getFlashMs());
   };
 
   const pct = ((idx + (running ? 0 : 1)) / TOTAL) * 100;
