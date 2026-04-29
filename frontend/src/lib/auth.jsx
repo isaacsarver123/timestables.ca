@@ -23,8 +23,18 @@ export const AuthProvider = ({ children }) => {
       setUser(data);
       return data;
     } catch {
-      setUser(null);
-      return null;
+      // /auth/me skips the auto-refresh interceptor on purpose. Try a manual
+      // refresh-and-retry so a returning user with an expired access token
+      // (but valid refresh cookie) is still picked up as signed-in.
+      try {
+        await api.post("/auth/refresh");
+        const { data } = await api.get("/auth/me");
+        setUser(data);
+        return data;
+      } catch {
+        setUser(null);
+        return null;
+      }
     }
   }, [setUser]);
 

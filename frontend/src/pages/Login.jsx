@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LogIn, UserPlus } from "lucide-react";
 import { api, formatErr } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -21,7 +21,7 @@ export default function Login() {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setUser(data);
-      toast.success("Welcome back");
+      toast.success(`Welcome back, ${data.name}`);
       nav(loc.state?.from || "/", { replace: true });
     } catch (ex) {
       setErr(formatErr(ex.response?.data?.detail) || ex.message);
@@ -32,11 +32,13 @@ export default function Login() {
 
   return (
     <div className="max-w-md mx-auto" data-testid="login-page">
+      <AuthTabs active="login" />
+
       <div className="mb-7">
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Sign in</div>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1">Welcome back.</h1>
         <p className="text-sm text-muted mt-2">
-          Sign in to sync your progress across devices.
+          Pick up where you left off. Your progress syncs across every device you sign in on.
         </p>
       </div>
 
@@ -69,6 +71,33 @@ export default function Login() {
     </div>
   );
 }
+
+export const AuthTabs = ({ active }) => (
+  <div className="flex gap-2 brut-border surface p-1.5 mb-6 w-fit mx-auto" data-testid="auth-tabs">
+    <Link
+      to="/login"
+      data-testid="auth-tab-login"
+      className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
+        active === "login"
+          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+          : "text-muted hover:text-fg"
+      }`}
+    >
+      <LogIn size={13} /> Sign in
+    </Link>
+    <Link
+      to="/register"
+      data-testid="auth-tab-register"
+      className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${
+        active === "register"
+          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+          : "text-muted hover:text-fg"
+      }`}
+    >
+      <UserPlus size={13} /> Sign up
+    </Link>
+  </div>
+);
 
 const Field = ({ label, testid, type = "text", value, onChange, placeholder, autoFocus }) => (
   <label className="block">

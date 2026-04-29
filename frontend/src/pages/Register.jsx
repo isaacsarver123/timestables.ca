@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Heart, ShieldCheck, DollarSign } from "lucide-react";
 import { api, formatErr } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { AuthTabs } from "@/pages/Login";
 
 export default function Register() {
   const { setUser } = useAuth();
@@ -25,7 +26,7 @@ export default function Register() {
     try {
       const { data } = await api.post("/auth/register", { email, password, name });
       setUser(data);
-      toast.success("Account created — 2-day free trial started.");
+      toast.success(`Welcome, ${data.name}! Your 2-day free trial just started.`);
       nav("/", { replace: true });
     } catch (ex) {
       setErr(formatErr(ex.response?.data?.detail) || ex.message);
@@ -36,12 +37,48 @@ export default function Register() {
 
   return (
     <div className="max-w-md mx-auto" data-testid="register-page">
-      <div className="mb-7">
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Create account</div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1">Start your 2-day free trial.</h1>
+      <AuthTabs active="register" />
+
+      <div className="mb-6">
+        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Sign up</div>
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-fg mt-1">Welcome.</h1>
         <p className="text-sm text-muted mt-2">
-          No card required for the trial. After 2 days, $5 CAD/month keeps the lights on.
+          2-day free trial, no card required. After that it's <span className="font-bold text-fg">$5 CAD/month</span>
+          {" — "}cancel anytime, no funny business.
         </p>
+      </div>
+
+      {/* Friendly pitch — anti-bait-and-switch */}
+      <div className="surface brut-border p-4 mb-5 space-y-2" data-testid="register-pitch">
+        <div className="flex items-start gap-2.5">
+          <DollarSign size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+          <div className="text-xs text-fg">
+            <span className="font-bold">No $99/mo nonsense.</span>{" "}
+            <span className="text-muted">
+              Other sites charge ridiculous fees for the same thing. We charge $5 — flat. That keeps the
+              servers on and the developers fed. That's it.
+            </span>
+          </div>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <ShieldCheck size={15} className="text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-fg">
+            <span className="font-bold">No card during the trial.</span>{" "}
+            <span className="text-muted">
+              You only put a card in if you decide to keep going after 2 days. We'll never charge you
+              by surprise.
+            </span>
+          </div>
+        </div>
+        <div className="flex items-start gap-2.5">
+          <Heart size={15} className="text-rose-500 mt-0.5 shrink-0" />
+          <div className="text-xs text-fg">
+            <span className="font-bold">Built by an indie dev.</span>{" "}
+            <span className="text-muted">
+              Real human shipping real updates. If something breaks, message us — we'll fix it.
+            </span>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={submit} className="surface brut-border p-5 space-y-4">
@@ -56,17 +93,13 @@ export default function Register() {
             {err}
           </div>
         )}
-        <div className="flex items-start gap-2 text-[11px] text-muted bg-amber-50 dark:bg-amber-900/20 brut-border-soft p-2.5">
-          <Sparkles size={13} className="text-amber-600 mt-0.5 shrink-0" />
-          <span>One trial per email. Reusing a known email won't grant another trial.</span>
-        </div>
         <button
           type="submit"
           disabled={busy}
           data-testid="register-submit"
           className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold uppercase tracking-wider text-sm py-3 hover:bg-blue-600 hover:text-white active:translate-x-1 active:translate-y-1 active:brut-shadow-none disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
-          {busy ? "Creating…" : "Create account & start trial"} <ArrowRight size={16} />
+          {busy ? "Creating…" : "Start free trial"} <ArrowRight size={16} />
         </button>
       </form>
 
