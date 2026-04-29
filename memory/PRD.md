@@ -27,7 +27,16 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5.5 — Lesson visual polish + draggable number-line + cursor-react + header polish (this round)
+### v5.6 — Lesson visual fixes + challenge structure (this round)
+- **Fixed the "10 dots became 1 giant circle" bug** — `motion.circle` with animated `cx`/`cy` was unreliable in SVG. Replaced with `motion.g` + `transform: translate(x, y)` for the cursor-react motion; underlying `<circle>` keeps static `cx`/`cy` attributes so all dots always render at distinct positions.
+- **Auto-transposing layouts** — when `rows > cols * 1.6`, GroupedDots and DotGrid swap dimensions so a 10×3 multiplication renders as a wide 3×10 grid that fits the 5/4 canvas (no clipping).
+- **Tightened motion** — repulsion force reduced from 7 → 2.5 px and range from 2.5× to 1.6× cell-width, so dots no longer feel hyperactive.
+- **Local correctness for instant flash** — `LessonQuestion` now computes `localCorrect = chosen === answer` from its own state, so the slot/tile flash green/rose immediately on click. No more "stays white, doesn't advance" race.
+- **Challenge questions structure** — `BASE_QUESTIONS = 17`, `HARD_DOTS = 3`. Progress bar tracks the first 17; on the last 3, an amber "Challenge question N / 3" banner appears above the question. Hard-dots redesigned as tiny `w-3 h-3 brut-border` rectangles (matching the bar style), emerald-500 when filled.
+- **Streak indicator pushed to far right** of the hero row with `ml-auto`, no longer crowds the title.
+- **Popover overlap fix** — the lesson-node popover keeps its top-spacing as internal padding (`paddingTop: 12`) instead of an external `mt-5`, so the parent's hover hit-area extends seamlessly to the popover. No more "popover disappears when mouse moves toward Jump-here".
+
+### v5.5 — Lesson visual polish + draggable interactives + ... (prior round)
 - **Capped visual canvas** at `max-w-sm aspect-[5/4] max-h-[40vh]` so tiny values like 2×1 / 2×2 render proportionally — no more screen-filling single-block bug.
 - **Removed the dashed green outline ring** from clusters; replaced with a subtle 8%-opacity rounded backdrop tile. No more visual confusion.
 - **Cursor-react dot grid** — dots within ~2.5 cell-widths of the pointer spring away gently (max ~7px push) for a tactile "alive" feel.

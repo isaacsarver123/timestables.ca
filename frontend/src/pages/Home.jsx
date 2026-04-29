@@ -59,46 +59,45 @@ const Home = () => {
           {cms.announcement}
         </div>
       )}
-      {/* Hero + streak: text on the left, compact streak pill on the right
-          (stacks on mobile so neither side gets crammed). */}
-      <section className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
-            Times Tables
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg mt-1" data-testid="hero-title">
+      {/* Hero with streak pill snugged up against the title (no full-width gap). */}
+      <section>
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+          Times Tables
+        </div>
+        <div className="flex flex-wrap items-center gap-6 md:gap-10 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg" data-testid="hero-title">
             {cms?.hero_title || "Practice multiplication and division."}
           </h1>
-          <p className="text-muted text-sm mt-2 max-w-xl" data-testid="hero-subtitle">
-            {cms?.hero_subtitle || "Pick the tables you want, choose a mode, and go. Progress saves across your devices."}
-          </p>
-        </div>
-        {(() => {
-          const streak = state.dailyStreak?.count || 0;
-          const lit = streak > 0;
-          return (
-            <div
-              data-testid="home-streak"
-              className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-3 py-2.5 flex items-center gap-2.5 rounded-md shrink-0 self-start sm:self-end`}
-            >
-              <motion.div
-                animate={lit ? { scale: [1, 1.12, 1], rotate: [0, -6, 6, 0] } : { scale: 1 }}
-                transition={lit ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" } : { duration: 0 }}
-                className={`w-9 h-9 brut-border grid place-items-center ${lit ? "bg-rose-500 text-white" : "surface text-muted"}`}
+          {(() => {
+            const streak = state.dailyStreak?.count || 0;
+            const lit = streak > 0;
+            return (
+              <div
+                data-testid="home-streak"
+                className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-2.5 py-1.5 flex items-center gap-2 rounded-md shrink-0 ml-auto`}
               >
-                <Flame size={16} strokeWidth={2.5} fill={lit ? "currentColor" : "none"} />
-              </motion.div>
-              <div className="leading-tight">
-                <div className={`text-[9px] uppercase tracking-[0.2em] font-bold ${lit ? "text-zinc-900" : "text-muted"}`}>
-                  Streak
-                </div>
-                <div className="font-mono font-black text-xl tabular-nums" data-testid="home-streak-count">
-                  {streak}
+                <motion.div
+                  animate={lit ? { scale: [1, 1.12, 1], rotate: [0, -6, 6, 0] } : { scale: 1 }}
+                  transition={lit ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" } : { duration: 0 }}
+                  className={`w-7 h-7 brut-border grid place-items-center ${lit ? "bg-rose-500 text-white" : "surface text-muted"}`}
+                >
+                  <Flame size={13} strokeWidth={2.5} fill={lit ? "currentColor" : "none"} />
+                </motion.div>
+                <div className="leading-tight">
+                  <div className={`text-[9px] uppercase tracking-[0.2em] font-bold ${lit ? "text-zinc-900" : "text-muted"}`}>
+                    Streak
+                  </div>
+                  <div className="font-mono font-black text-base tabular-nums" data-testid="home-streak-count">
+                    {streak}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
+        </div>
+        <p className="text-muted text-sm mt-2 max-w-xl" data-testid="hero-subtitle">
+          {cms?.hero_subtitle || "Pick the tables you want, choose a mode, and go. Progress saves across your devices."}
+        </p>
       </section>
 
       {/* Modes */}

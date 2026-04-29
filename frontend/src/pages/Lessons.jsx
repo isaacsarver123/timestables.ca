@@ -44,7 +44,8 @@ const DIFF = {
   hard:   { label: "Hard",   tables: [3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], maxFactor: 18 },
 };
 const TOTAL = 20;
-const HARD_DOTS = 3;
+const BASE_QUESTIONS = 17;       // questions before the challenge round
+const HARD_DOTS = 3;             // == TOTAL - BASE_QUESTIONS
 const TEST_HEARTS = 5;
 const TEST_QUESTIONS = 20;
 
@@ -458,7 +459,12 @@ export default function Lessons() {
 
   // ── render: PLAY ──────────────────────────────────────────────────────────
   if (phase === "play") {
-    const pct = ((idx + (status === "idle" ? 0 : 1)) / TOTAL) * 100;
+    // Bar represents the first BASE_QUESTIONS (17). The remaining 3 are the
+    // challenge round and use the dot rectangles instead.
+    const isChallenge = idx >= BASE_QUESTIONS;
+    const challengeNum = isChallenge ? idx - BASE_QUESTIONS + 1 : 0;
+    const baseDone = Math.min(idx, BASE_QUESTIONS) + (status !== "idle" && idx < BASE_QUESTIONS ? 1 : 0);
+    const pct = (baseDone / BASE_QUESTIONS) * 100;
     return (
       // Fit the entire play UI inside the viewport (no scroll). The container
       // collapses the top/bottom padding the Layout adds so we get more height,
@@ -496,17 +502,28 @@ export default function Lessons() {
               transition={{ duration: 0.3 }}
             />
           </div>
+          {/* Challenge dots — little emerald rectangles matching the bar style.
+              Each one fills green when its corresponding challenge question is
+              answered correctly. */}
           <div className="flex items-center gap-1" data-testid="lesson-hard-dots">
             {Array.from({ length: HARD_DOTS }).map((_, i) => (
               <div
                 key={i}
-                className={`w-2.5 h-2.5 rounded-full brut-border-soft ${
-                  hardCorrect > i ? "bg-amber-400" : "surface-2"
+                className={`w-3 h-3 brut-border ${
+                  hardCorrect > i ? "bg-emerald-500" : "surface-2"
                 }`}
               />
             ))}
           </div>
         </div>
+
+        {/* Challenge banner — replaces the standard "Q N / 20" text once the
+            base questions are done. */}
+        {isChallenge && (
+          <div className="text-center text-[11px] uppercase tracking-[0.25em] text-amber-500 font-bold mb-2 shrink-0" data-testid="challenge-banner">
+            Challenge question {challengeNum} / {HARD_DOTS}
+          </div>
+        )}
 
         <AnimatePresence>
           {status === "reviewing" && explanation && (
@@ -558,7 +575,7 @@ export default function Lessons() {
         )}
 
         <div className="text-center mt-2 text-[11px] text-muted font-mono shrink-0 pb-2" data-testid="lesson-progress-text">
-          Q{idx + 1} / {TOTAL}
+          {isChallenge ? `Q${idx + 1} / ${TOTAL}` : `Q${idx + 1} / ${BASE_QUESTIONS}`}
         </div>
       </div>
     );
@@ -1003,7 +1020,7 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
   // starts the lesson (the natural primary action).
   return (
     <div
-      className="relative"
+      className={`relative ${open ? "z-50" : "z-10"}`}
       onMouseEnter={() => !done && setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
@@ -1060,7 +1077,8 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.95 }}
             transition={{ duration: 0.14 }}
-            className="absolute left-1/2 top-full mt-3 -translate-x-1/2 z-30 w-60 surface brut-border brut-shadow p-3 rounded-md text-left"
+            className="absolute left-1/2 top-full -translate-x-1/2 z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto"
+            style={{ marginTop: 0, paddingTop: 12 }}
             data-testid={`lesson-path-popover-${lesson.id}`}
             role="dialog"
           >
