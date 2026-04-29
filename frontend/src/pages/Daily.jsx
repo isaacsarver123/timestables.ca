@@ -71,7 +71,7 @@ const Daily = () => {
         setStatus("idle");
         startTs.current = performance.now();
       }
-    }, 350);
+    }, correct ? 350 : 1900);
   };
 
   const pct = ((idx + (running ? 0 : 1)) / TOTAL) * 100;

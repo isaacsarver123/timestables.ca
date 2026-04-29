@@ -27,7 +27,32 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v4.1 — Mobile + UX polish (this round)
+### v5 — Lessons + Gems + Profile/Friends (this round)
+- **Lessons mode** (`/lessons`):
+  - Lobby with topic multi-select (Multiplication / Division / Long Mult. / Long Div.) and "All" toggle (selecting "All" overrides others; tap again to clear).
+  - 20 questions full-screen, top progress bar, 3 hard-question dots.
+  - Per-question timer ≈ 0.75× Quick-Fire pace (9/6/4 s by difficulty).
+  - **Duolingo-style wrong-answer card:** "No, this isn't the answer. Here's why: …" pulled from typed `tableTips()` (trick or formula), Continue button to advance.
+  - End screen with correct/total, accuracy %, hard-Q tally, **XP and gems earned**, Perfect bonus banner, "New lesson"/"Home".
+  - **Quit-confirm modal** specific to lessons: "Your XP is saved, but you won't get the perfect-lesson bonus."
+  - Backend: `POST /api/lessons/finish` computes XP (15 + 3×diff) × accuracy × 1.6 + 25 perfect bonus; +5 gems on perfect. `db.lesson_runs` history collection.
+- **Gems** (earn-only this round):
+  - `db.users.gems` integer, surfaced in `/api/auth/me` and the new HUD pill (cyan diamond).
+  - +5 gems on perfect lesson, +N via `POST /api/gems/grant {delta, reason}` (server-validated, capped at +50 per call).
+  - `db.gem_transactions` ledger, `GET /api/gems/history`.
+- **Profile system** (`/profile`):
+  - Public-facing Duolingo-style page: purple gradient header, big avatar (clickable → editor), name, `@username`, bio, Following/Followers stats, **Add Friends** button.
+  - Edit profile modal (name / username / bio / private toggle).
+  - Friend Suggestions list under the header (auto-populated with public users you don't already follow).
+  - **Avatar editor** (`/profile/avatar`): tabs Body · Background · Hair · Hair Color · Expression · Glasses · Hat. Each tab shows option grid with live-preview avatars. Randomize button. Save → `PUT /api/profile {avatar}`.
+  - **Other-user profile** (`/u/:username`): same purple header + Follow/Unfollow button + locked view for private accounts.
+  - Backend: `GET /api/profile/me`, `PUT /api/profile`, `GET /api/u/{username}`, `POST/DELETE /api/u/{username}/follow`, `GET /api/profile/suggestions`, `GET /api/profile/search?q=`. `db.follows` collection (compound unique index follower_id+following_id). Username 3–20 chars `[a-z0-9_]`, unique.
+- **Wrong-answer flash fix** (carried over from v4.1): smoother enter, fixed exit, sits in a clear emerald card for ~2 seconds typed-mode in QuickFire / Streak / Boss / Daily, no longer feels glitchy.
+- **Brand stack tightened** to `leading-[0.95]`.
+- **Hero CMS reset** (`TEST Hero …` cleared once more).
+- **Level math safe** — verified up to 9999 with display cap on the HUD pill; underlying Number stays exact through 2^53.
+
+### v4.1 — Mobile + UX polish (prior)
 - **Mobile responsiveness pass:** Settings, Admin Users + Recent Payments rows wrap cleanly at 390px wide (tested via testing agent — no horizontal scroll).
 - **QuickFire end-screen:** "Time" + "UP." inline, same colour, "UP." pops big → shrinks (`time-up-up` testid).
 - **Wrong-answer reveal:** Question component now flashes the correct number with a bouncy scale on wrong-typed answers (`wrong-answer-reveal`). Wired in QuickFire / Streak / Boss / Daily.

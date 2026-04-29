@@ -19,6 +19,10 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Paywall from "@/pages/Paywall";
 import Admin from "@/pages/Admin";
+import Lessons from "@/pages/Lessons";
+import Profile from "@/pages/Profile";
+import AvatarEditor from "@/pages/AvatarEditor";
+import PublicProfile from "@/pages/PublicProfile";
 import { BillingSuccess, BillingCancel } from "@/pages/BillingResult";
 import { AuthProvider } from "@/lib/auth";
 import { initRemoteSync, getState, subscribe } from "@/lib/storage";
@@ -83,6 +87,10 @@ function App() {
             <Route path="/play/daily" element={<Layout><PaywallGuard><Daily /></PaywallGuard></Layout>} />
             <Route path="/play/long-mul" element={<Layout><PaywallGuard><LongMul /></PaywallGuard></Layout>} />
             <Route path="/play/long-div" element={<Layout><PaywallGuard><LongDiv /></PaywallGuard></Layout>} />
+            <Route path="/lessons" element={<Layout><PaywallGuard><Lessons /></PaywallGuard></Layout>} />
+            <Route path="/profile" element={<Layout><PaywallGuard allowExpired><Profile /></PaywallGuard></Layout>} />
+            <Route path="/profile/avatar" element={<Layout><PaywallGuard allowExpired><AvatarEditor /></PaywallGuard></Layout>} />
+            <Route path="/u/:username" element={<Layout><PaywallGuard><PublicProfile /></PaywallGuard></Layout>} />
             <Route path="/stats" element={<Layout><PaywallGuard><Stats /></PaywallGuard></Layout>} />
             <Route path="/shop" element={<Layout><PaywallGuard><Shop /></PaywallGuard></Layout>} />
           </Routes>

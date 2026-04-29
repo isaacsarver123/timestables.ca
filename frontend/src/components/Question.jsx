@@ -77,21 +77,26 @@ export const Question = forwardRef(function Question(
         />
       </motion.div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {status === "wrong" && correctAnswer != null && (
           <motion.div
             key="reveal"
-            initial={{ opacity: 0, y: -4, scale: 0.85 }}
-            animate={{ opacity: 1, y: 0, scale: [1, 1.18, 1] }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1], times: [0, 0.5, 1] }}
-            className="mt-3 mx-auto max-w-sm flex items-center justify-center gap-2 text-center"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="mt-4 mx-auto max-w-sm brut-border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 px-4 py-3 flex items-center justify-center gap-3 text-center"
             data-testid="wrong-answer-reveal"
           >
             <span className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Answer was</span>
-            <span className="font-mono font-black text-3xl sm:text-4xl text-emerald-600 dark:text-emerald-400 tabular-nums">
+            <motion.span
+              initial={{ scale: 0.9 }}
+              animate={{ scale: [0.9, 1.15, 1] }}
+              transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1], times: [0, 0.45, 1] }}
+              className="font-mono font-black text-3xl sm:text-4xl text-emerald-600 dark:text-emerald-400 tabular-nums"
+            >
               {correctAnswer}
-            </span>
+            </motion.span>
           </motion.div>
         )}
       </AnimatePresence>

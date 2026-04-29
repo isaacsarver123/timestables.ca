@@ -96,8 +96,8 @@ const QuickFire = () => {
         setLastChoice(guess);
         setTimeout(() => next(), 900);
       } else {
-        // Show correct answer briefly, then move on.
-        setTimeout(() => next(), 1100);
+        // Show correct answer for ~2s — long enough to actually read.
+        setTimeout(() => next(), 1900);
       }
     }
   };

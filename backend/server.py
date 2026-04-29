@@ -118,6 +118,14 @@ def serialize_user(doc: dict) -> dict:
         "has_access": has_access,
         "is_admin": role == "admin",
         "subscription_status": sub_status,
+        "gems": int(doc.get("gems") or 0),
+        "username": doc.get("username"),
+        "bio": doc.get("bio") or "",
+        "is_private": bool(doc.get("is_private", False)),
+        "avatar": doc.get("avatar") or {},
+        "created_at": (doc.get("created_at").isoformat()
+                       if isinstance(doc.get("created_at"), datetime)
+                       else doc.get("created_at")),
         "billing": {
             "current_period_end": sub.get("current_period_end"),
             "cancel_at_period_end": sub.get("cancel_at_period_end", False),
@@ -207,6 +215,8 @@ class ProfileUpdateIn(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
     is_private: Optional[bool] = None
+    username: Optional[str] = None  # 3-20 chars, [a-z0-9_]
+    avatar: Optional[dict] = None   # arbitrary config blob
 
 
 class FriendCodeIn(BaseModel):
@@ -590,6 +600,266 @@ async def stripe_webhook(request: Request):
         except Exception as e:
             log.error("subscription sync failed: %s", e)
     return {"received": True}
+
+
+# -------------------------------------------------------- PROFILE / FOLLOW
+import re as _re
+
+def _validate_username(u: str) -> str:
+    u = (u or "").lower().strip().lstrip("@")
+    if not _re.fullmatch(r"[a-z0-9_]{3,20}", u):
+        raise HTTPException(status_code=400, detail="Username must be 3–20 chars: a-z, 0-9, _.")
+    return u
+
+
+async def _user_public(doc: dict) -> dict:
+    """Public-safe view of a user (no email unless self)."""
+    if not doc:
+        return None
+    return {
+        "id": str(doc["_id"]),
+        "name": doc.get("name") or (doc.get("email") or "").split("@")[0],
+        "username": doc.get("username"),
+        "bio": doc.get("bio") or "",
+        "is_private": bool(doc.get("is_private", False)),
+        "avatar": doc.get("avatar") or {},
+        "created_at": (doc.get("created_at").isoformat()
+                       if isinstance(doc.get("created_at"), datetime)
+                       else doc.get("created_at")),
+    }
+
+
+async def _follow_counts(user_id: str) -> dict:
+    following = await db.follows.count_documents({"follower_id": user_id})
+    followers = await db.follows.count_documents({"following_id": user_id})
+    return {"following": following, "followers": followers}
+
+
+@api.put("/profile")
+async def profile_update(payload: ProfileUpdateIn, user: dict = Depends(get_token_user)):
+    upd = {}
+    if payload.name is not None:
+        upd["name"] = payload.name.strip()[:60]
+    if payload.bio is not None:
+        upd["bio"] = payload.bio.strip()[:200]
+    if payload.is_private is not None:
+        upd["is_private"] = bool(payload.is_private)
+    if payload.avatar is not None:
+        upd["avatar"] = payload.avatar
+    if payload.username is not None:
+        u = _validate_username(payload.username)
+        clash = await db.users.find_one({"username": u, "_id": {"$ne": user["_id"]}})
+        if clash:
+            raise HTTPException(status_code=400, detail="Username taken.")
+        upd["username"] = u
+    if not upd:
+        return serialize_user(user)
+    await db.users.update_one({"_id": user["_id"]}, {"$set": upd})
+    refreshed = await db.users.find_one({"_id": user["_id"]})
+    return serialize_user(refreshed)
+
+
+@api.get("/profile/me")
+async def profile_me(user: dict = Depends(get_token_user)):
+    """Own profile + follow stats."""
+    counts = await _follow_counts(str(user["_id"]))
+    pub = await _user_public(user)
+    return {**pub, **counts, "email": user["email"]}
+
+
+@api.get("/u/{username}")
+async def profile_by_username(username: str, user: dict = Depends(get_token_user)):
+    u = _validate_username(username)
+    target = await db.users.find_one({"username": u})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    pub = await _user_public(target)
+    counts = await _follow_counts(str(target["_id"]))
+    am_following = await db.follows.find_one({
+        "follower_id": str(user["_id"]),
+        "following_id": str(target["_id"]),
+    })
+    return {
+        **pub, **counts,
+        "is_self": str(target["_id"]) == str(user["_id"]),
+        "am_following": bool(am_following),
+        "private_locked": bool(target.get("is_private")) and str(target["_id"]) != str(user["_id"]),
+    }
+
+
+@api.post("/u/{username}/follow")
+async def follow_user(username: str, user: dict = Depends(get_token_user)):
+    u = _validate_username(username)
+    target = await db.users.find_one({"username": u})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target["_id"]) == str(user["_id"]):
+        raise HTTPException(status_code=400, detail="Can't follow yourself.")
+    if target.get("is_private"):
+        raise HTTPException(status_code=403, detail="This user's profile is private.")
+    await db.follows.update_one(
+        {"follower_id": str(user["_id"]), "following_id": str(target["_id"])},
+        {"$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"ok": True, "am_following": True}
+
+
+@api.delete("/u/{username}/follow")
+async def unfollow_user(username: str, user: dict = Depends(get_token_user)):
+    u = _validate_username(username)
+    target = await db.users.find_one({"username": u})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.follows.delete_one({
+        "follower_id": str(user["_id"]),
+        "following_id": str(target["_id"]),
+    })
+    return {"ok": True, "am_following": False}
+
+
+@api.get("/profile/suggestions")
+async def profile_suggestions(user: dict = Depends(get_token_user), limit: int = 10):
+    """Users with usernames that the current user isn't already following."""
+    already = {d["following_id"] async for d in db.follows.find(
+        {"follower_id": str(user["_id"])}, {"following_id": 1}
+    )}
+    already.add(str(user["_id"]))
+    cur = db.users.find(
+        {"username": {"$ne": None, "$exists": True}, "is_private": {"$ne": True}},
+        {"password_hash": 0},
+    ).limit(50)
+    out = []
+    async for u in cur:
+        if str(u["_id"]) in already:
+            continue
+        out.append(await _user_public(u))
+        if len(out) >= limit:
+            break
+    return {"suggestions": out}
+
+
+@api.get("/profile/search")
+async def profile_search(q: str, user: dict = Depends(get_token_user), limit: int = 20):
+    if not q or len(q) < 2:
+        return {"results": []}
+    safe_q = _re.escape(q.lower().lstrip("@"))
+    cur = db.users.find(
+        {
+            "$or": [
+                {"username": {"$regex": safe_q, "$options": "i"}},
+                {"name": {"$regex": safe_q, "$options": "i"}},
+            ]
+        },
+        {"password_hash": 0},
+    ).limit(min(limit, 50))
+    out = []
+    async for u in cur:
+        if str(u["_id"]) == str(user["_id"]):
+            continue
+        out.append(await _user_public(u))
+    return {"results": out}
+
+
+# Add username unique index on startup
+@app.on_event("startup")
+async def _profile_indexes():
+    await db.users.create_index(
+        "username",
+        unique=True,
+        partialFilterExpression={"username": {"$type": "string"}},
+    )
+    await db.follows.create_index([("follower_id", 1), ("following_id", 1)], unique=True)
+    await db.follows.create_index("following_id")
+
+
+# Re-add the LESSONS / GEMS routes block separator below.
+# -------------------------------------------------------- LESSONS / GEMS
+class LessonFinishIn(BaseModel):
+    topics: list[str]            # any of: multiplication, division, long_mul, long_div
+    difficulty: str              # easy | medium | hard
+    questions_total: int
+    correct: int
+    hard_correct: int = 0
+    seconds_taken: int = 0
+
+
+def _lesson_xp(payload: LessonFinishIn) -> int:
+    """XP proportional to existing economy (Quick-Fire ≈ 3 XP per correct).
+    Max 75 for a perfect Hard lesson; min 0 for 0/total."""
+    diff_factor = {"easy": 1, "medium": 2, "hard": 3}.get(payload.difficulty, 2)
+    base = 15 + 3 * diff_factor                    # 18 / 21 / 24
+    accuracy = (payload.correct / payload.questions_total) if payload.questions_total else 0
+    xp = int(round(base * accuracy * 1.6))         # tune so hard-perfect ≈ 38
+    if payload.questions_total > 0 and payload.correct == payload.questions_total:
+        xp += 25                                   # perfect bonus
+    return max(0, xp)
+
+
+def _lesson_gems(payload: LessonFinishIn) -> int:
+    if payload.questions_total > 0 and payload.correct == payload.questions_total:
+        return 5
+    return 0
+
+
+@api.post("/lessons/finish")
+async def lessons_finish(payload: LessonFinishIn, user: dict = Depends(get_token_user)):
+    if payload.questions_total <= 0 or payload.correct < 0 or payload.correct > payload.questions_total:
+        raise HTTPException(status_code=400, detail="Invalid lesson result")
+    xp_earned = _lesson_xp(payload)
+    gems_earned = _lesson_gems(payload)
+    now = datetime.now(timezone.utc)
+    await db.lesson_runs.insert_one({
+        "user_id": str(user["_id"]),
+        "topics": payload.topics,
+        "difficulty": payload.difficulty,
+        "questions_total": payload.questions_total,
+        "correct": payload.correct,
+        "hard_correct": payload.hard_correct,
+        "seconds_taken": payload.seconds_taken,
+        "xp_earned": xp_earned,
+        "gems_earned": gems_earned,
+        "created_at": now,
+    })
+    if gems_earned:
+        await db.users.update_one({"_id": user["_id"]}, {"$inc": {"gems": gems_earned}})
+        await db.gem_transactions.insert_one({
+            "user_id": str(user["_id"]),
+            "delta": gems_earned,
+            "reason": f"perfect_lesson_{payload.difficulty}",
+            "created_at": now.isoformat(),
+        })
+    return {"xp_earned": xp_earned, "gems_earned": gems_earned}
+
+
+@api.post("/gems/grant")
+async def gems_grant(payload: GemsAdjustIn, user: dict = Depends(get_token_user)):
+    """Internal endpoint the frontend pings on perfect Quick-Fire / streak
+    milestones. Hard-capped at +50 per call to prevent client tampering."""
+    if payload.delta == 0:
+        return {"gems": int(user.get("gems") or 0)}
+    if payload.delta < -200 or payload.delta > 50:
+        raise HTTPException(status_code=400, detail="Out-of-range gem adjustment")
+    res = await db.users.find_one_and_update(
+        {"_id": user["_id"]},
+        {"$inc": {"gems": payload.delta}},
+        return_document=True,
+    )
+    await db.gem_transactions.insert_one({
+        "user_id": str(user["_id"]),
+        "delta": payload.delta,
+        "reason": payload.reason or "client_grant",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"gems": int((res or {}).get("gems") or 0)}
+
+
+@api.get("/gems/history")
+async def gems_history(user: dict = Depends(get_token_user), limit: int = 30):
+    cur = db.gem_transactions.find(
+        {"user_id": str(user["_id"])}, {"_id": 0}
+    ).sort("created_at", -1).limit(min(limit, 100))
+    return {"transactions": [t async for t in cur]}
 
 
 # -------------------------------------------------------- ADMIN

@@ -79,7 +79,8 @@ const Boss = () => {
         setOutcome("lose");
         setPhase("result");
       } else {
-        setTimeout(newQ, 400);
+        // 2s lets the user read "Answer was: X" before the next question.
+        setTimeout(newQ, 1900);
       }
       return nl;
     });

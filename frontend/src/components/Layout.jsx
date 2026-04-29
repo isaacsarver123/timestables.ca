@@ -16,6 +16,8 @@ import {
   LogIn,
   User as UserIcon,
   ShieldCheck,
+  GraduationCap,
+  Gem,
 } from "lucide-react";
 import {
   getState,
@@ -51,11 +53,12 @@ export const Layout = ({ children }) => {
 
   const navItems = [
     { to: "/", label: "Play", icon: HomeIcon, testid: "nav-home" },
+    { to: "/lessons", label: "Lesson", icon: GraduationCap, testid: "nav-lessons" },
     { to: "/learn", label: "Learn", icon: BookOpen, testid: "nav-learn" },
     { to: "/play/daily", label: "Daily", icon: CalendarCheck, testid: "nav-daily" },
     { to: "/stats", label: "Stats", icon: BarChart3, testid: "nav-stats" },
     { to: "/shop", label: "Shop", icon: Store, testid: "nav-shop" },
-    { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "nav-settings" },
+    { to: "/profile", label: "Profile", icon: UserIcon, testid: "nav-profile" },
   ];
   if (isAdmin) {
     navItems.push({ to: "/admin", label: "Admin", icon: ShieldCheck, testid: "nav-admin" });
@@ -152,6 +155,16 @@ export const Layout = ({ children }) => {
                   <Coins size={14} className="text-amber-500" />
                   <span className="font-mono text-sm tabular-nums text-fg font-semibold">
                     {state.coins}
+                  </span>
+                </div>
+                <div
+                  className="hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
+                  data-testid="hud-gems"
+                  title="Gems"
+                >
+                  <Gem size={14} className="text-cyan-500" />
+                  <span className="font-mono text-sm tabular-nums text-fg font-semibold">
+                    {user?.gems ?? 0}
                   </span>
                 </div>
                 <div
