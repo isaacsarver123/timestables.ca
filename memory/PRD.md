@@ -27,6 +27,20 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
+### v5.2 — 1000-Lesson Path + Brilliant-style in-lesson UI (this round)
+- **1005 lessons across 67 levels**, generated programmatically in `lib/lessonPath.js`. Streams: Multiplication (17 lvls), Division (17), Long Multiplication (15), Long Division (15), Mastery (3). Difficulty ramps within each stream (Beginner → Easy → Medium → Hard → Expert). Each level has 15 lessons; the last is a unit-boss node.
+- **Test-out per level**: 20 questions, **5 hearts**. Each wrong answer drops a heart; 0 hearts = fail. Pass marks all 15 lessons in the level complete and unlocks the next level (+60 XP).
+- **Endless mode**: locked tile that unlocks once every lesson is cleared, then auto-generates random hard questions for unlimited play.
+- **Two-column lobby layout**: path on the left/main, **sticky Custom Lesson sidebar on the right** (`lg:sticky lg:top-24`); single column on mobile.
+- **Centered zig-zag**: lessons curve outward from the middle via `Math.sin((i/3) * π) * 90px` so the path uses the full width.
+- **Brilliant-style in-lesson UI** (`components/LessonQuestion.jsx`):
+  - Plain-English prompt ("What is **four** times **nine**?")
+  - Full-bleed dark canvas with a **dot-grid visualization** (animated `a × b` for multiplication, rows-of-`divisor` for division, big-number fallback past 400 dots)
+  - Dashed answer slot + **3 large multiple-choice tiles** (correct flashes green, wrong flashes rose and reveals the right tile)
+  - Used in path lessons, custom lessons, and endless mode. Test-out keeps typed input via the original Question component.
+- **Pre-lesson "Did you know?" splash** (`components/LessonLoading.jsx`): every lesson / custom run / endless / test start runs through a 1.8s loading screen with a tip from the lesson's primary table + an animated progress bar.
+- Path progress meter in the lobby ("X / 1005 · Y%") and inside the sidebar.
+
 ### v5.1 — Lesson Path + CMS-driven Stripe + UX polish (this round)
 - **Admin credentials rotated** to `isaacsarver100@gmail.com` / `Isabella0412!`. Backend startup now also auto-deletes the legacy `isaac@timestables.ca` admin so we never end up with two admins.
 - **Duolingo-style Lesson Path** on `/lessons`: 4 themed units (Foundations / Division / Long Mult. / Long Div.) totalling 14 nodes laid out in a curved zig-zag. Sequential unlock, animated pulse on the next-up node, completion check-marks, locked padlocks, square boss nodes with a trophy. Progress persists to `localStorage` (`tt_lesson_path_v1`). The previous topic+difficulty selector is now a collapsible **Custom lesson** section below the path.
