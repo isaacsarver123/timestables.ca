@@ -24,6 +24,7 @@ import LessonQuestion from "@/components/LessonQuestion";
 import LessonLoading from "@/components/LessonLoading";
 import CompletionCelebration from "@/components/CompletionCelebration";
 import ConfirmLeaveModal from "@/components/ConfirmLeaveModal";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useNavGuard } from "@/lib/leaveGuard";
 import { generateQuestion, tableTips } from "@/lib/game";
 import { addCoinsAndXp, recordAnswer, markCompletedActivityToday } from "@/lib/storage";
@@ -921,7 +922,8 @@ const Stat = ({ label, value }) => (
 // ─────────────────────────────────────────────────────────────────────────
 // Centered zig-zag: lessons curve outward from the centre using a sine wave
 // so the path feels organic and uses the full width.
-// Each non-completed lesson has a hover/click popover offering "Jump here".
+// LOCKED nodes: click → Radix Popover (portaled, collision-detected, no flicker).
+// UNLOCKED / DONE nodes: click → start/practice immediately. No popover.
 // ─────────────────────────────────────────────────────────────────────────
 function LessonPath({
   path,
@@ -932,10 +934,6 @@ function LessonPath({
   onStart,
   onJumpHere,
 }) {
-  // Single source of truth for which lesson popover is open. Ensures only one
-  // popover ever appears at a time — no overlapping cards.
-  const [openId, setOpenId] = useState(null);
-
   let nextLessonId = null;
   outer: for (const lv of path) {
     for (const l of lv.lessons) {
@@ -985,16 +983,6 @@ function LessonPath({
                 const lessonDone = isLessonCompleted(lesson.id);
                 const isNext = lesson.id === nextLessonId;
                 const offset = Math.sin((i / 3) * Math.PI) * 90;
-                // Put the popover on the side OPPOSITE the neighbouring node
-                // with the largest offset, so it never overlaps the next/prev
-                // lesson in the zig-zag.
-                const prevOffset = i > 0 ? Math.sin(((i - 1) / 3) * Math.PI) * 90 : 0;
-                const nextOffset = i < unit.lessons.length - 1 ? Math.sin(((i + 1) / 3) * Math.PI) * 90 : 0;
-                const neighbourOffset = Math.abs(nextOffset) > Math.abs(prevOffset) ? nextOffset : prevOffset;
-                // If neighbour is to the right of THIS node (in screen coords:
-                // neighbour_offset > this_offset), put popover on the LEFT.
-                // Otherwise on the right.
-                const sideHint = (neighbourOffset - offset) > 0 ? "left" : "right";
                 return (
                   <div
                     key={lesson.id}
@@ -1007,10 +995,6 @@ function LessonPath({
                       done={lessonDone}
                       unlocked={lessonUnlocked}
                       isNext={isNext}
-                      isOpen={openId === lesson.id}
-                      requestOpen={() => setOpenId(lesson.id)}
-                      requestClose={() => setOpenId((cur) => (cur === lesson.id ? null : cur))}
-                      sideHint={sideHint}
                       onStart={() => onStart(lesson, unit)}
                       onJump={() => onJumpHere(lesson)}
                     />
@@ -1030,152 +1014,104 @@ function LessonPath({
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// A single lesson node + a popover that appears on hover/focus (or tap on
-// touch devices) offering Start / Jump-here. Done lessons show no popover.
+// LessonNode
+// - DONE / NEXT-UP UNLOCKED: button click goes straight to start/practice.
+// - LOCKED (further ahead): button is the Radix Popover trigger. Click to
+//   open a portaled popover with the "Jump here" CTA. Radix handles
+//   click-outside-to-close, collision-detected sides, focus trap, and the
+//   portal escapes the parent's bounding box → no overlap with neighbours.
 // ─────────────────────────────────────────────────────────────────────────
-function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump, sideHint, isOpen, requestOpen, requestClose }) {
-  const closeTimer = useRef(null);
-  const cancelClose = () => { if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; } };
-  const scheduleClose = () => {
-    cancelClose();
-    closeTimer.current = setTimeout(() => requestClose(), 220);
-  };
-  const openNow = () => { cancelClose(); requestOpen(); };
-  const open = isOpen;
+function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
+  const [open, setOpen] = useState(false);
 
-  // Decide which side the popover sits on. `sideHint` from parent: 'right' is
-  // default; pass 'left' for nodes near the right edge so the popover doesn't
-  // clip off-screen. 'center' (below) for safe fallback.
-  const side = sideHint || "right";
-  const popoverPositioning =
-    side === "left"
-      ? "right-full top-1/2 -translate-y-1/2"
-      : side === "right"
-      ? "left-full top-1/2 -translate-y-1/2"
-      : "left-1/2 -translate-x-1/2 top-full"; // center-below
+  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
+    done
+      ? `${unit.accent} text-zinc-950 hover:-translate-y-0.5`
+      : unlocked
+      ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
+      : "surface-2 text-muted hover:-translate-y-0.5"
+  } ${lesson.boss ? "rounded-md" : "rounded-full"}`;
 
+  const innerIcon = done ? (
+    <CheckCircle2 size={26} strokeWidth={3} />
+  ) : !unlocked ? (
+    <Lock size={20} />
+  ) : lesson.boss ? (
+    <Trophy size={24} />
+  ) : (
+    <Star size={24} strokeWidth={2.5} />
+  );
+
+  // Pulsing "next-up" ring — sits OUTSIDE the button (inset negative) so the
+  // amber halo is actually visible around the node instead of being hidden
+  // behind the dark zinc circle.
+  const pulse = isNext && (
+    <motion.span
+      className={`absolute -inset-2 ${lesson.boss ? "rounded-lg" : "rounded-full"} ring-4 ring-amber-400`}
+      animate={{ scale: [1, 1.18, 1], opacity: [0.75, 0.15, 0.75] }}
+      transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      style={{ pointerEvents: "none" }}
+    />
+  );
+
+  // Direct-action button for done / next-up unlocked nodes — no popover.
+  if (done || unlocked) {
+    return (
+      <div className="relative">
+        {pulse}
+        <button
+          onClick={onStart}
+          data-testid={`lesson-path-node-${lesson.id}`}
+          aria-label={`${unit.title} · ${lesson.label}${done ? " (done)" : ""}`}
+          className={buttonClass}
+        >
+          {innerIcon}
+        </button>
+      </div>
+    );
+  }
+
+  // Locked node — popover with "Jump here" CTA.
   return (
-    // The wrapping <div> hugs only the circle. Hover detection happens on
-    // the circle itself, not a wide padding area — so adjacent lessons aren't
-    // triggered when the cursor is anywhere near them.
-    <div
-      className={`relative ${open ? "z-50" : "z-10"}`}
-      onMouseLeave={scheduleClose}
-    >
-      <button
-        onMouseEnter={openNow}
-        onClick={(e) => {
-          e.stopPropagation();
-          cancelClose();
-          if (done) {
-            onStart();
-            requestClose();
-          } else if (unlocked) {
-            onStart();
-            requestClose();
-          } else {
-            if (isOpen) requestClose(); else requestOpen();
-          }
-        }}
-        onFocus={openNow}
-        onBlur={scheduleClose}
-        data-testid={`lesson-path-node-${lesson.id}`}
-        aria-label={`${unit.title} · ${lesson.label}${done ? " (done)" : !unlocked ? " (locked)" : ""}`}
-        aria-expanded={open}
-        className={`relative w-16 h-16 sm:w-20 sm:h-20 brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
-          done
-            ? `${unit.accent} text-zinc-950`
-            : unlocked
-            ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
-            : "surface-2 text-muted hover:-translate-y-0.5"
-        } ${lesson.boss ? "rounded-md" : "rounded-full"}`}
-      >
-        {done ? (
-          <CheckCircle2 size={26} strokeWidth={3} />
-        ) : !unlocked ? (
-          <Lock size={20} />
-        ) : lesson.boss ? (
-          <Trophy size={24} />
-        ) : (
-          <Star size={24} strokeWidth={2.5} />
-        )}
-        {isNext && (
-          <motion.span
-            className={`absolute inset-0 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-4 ring-amber-400`}
-            animate={{ scale: [1, 1.1, 1], opacity: [0.7, 0.2, 0.7] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-            style={{ pointerEvents: "none" }}
-          />
-        )}
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            key="popover"
-            initial={{ opacity: 0, y: -6, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.95 }}
-            transition={{ duration: 0.14 }}
-            // Popover-as-sibling-of-the-button: own its hover state so the
-            // cursor can dwell here without re-triggering close. stopPropagation
-            // on enter prevents the popover from "leaking" hover events to any
-            // visually-underlying lesson node when popovers overlap.
-            onMouseEnter={(e) => { e.stopPropagation(); cancelClose(); }}
-            onMouseLeave={(e) => { e.stopPropagation(); scheduleClose(); }}
-            className={`absolute ${popoverPositioning} z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto p-3`}
-            data-testid={`lesson-path-popover-${lesson.id}`}
-            role="dialog"
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className="relative">
+        {pulse}
+        <PopoverTrigger asChild>
+          <button
+            data-testid={`lesson-path-node-${lesson.id}`}
+            aria-label={`${unit.title} · ${lesson.label} (locked)`}
+            className={buttonClass}
           >
-            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-bold">
-              {unit.title}
-            </div>
-            <div className="font-bold text-fg text-sm mb-1">
-              {lesson.label}
-              {lesson.boss && <span className="ml-1 text-amber-500">★</span>}
-              {done && <span className="ml-1 text-emerald-500" title="Completed">✓</span>}
-            </div>
-            <div className="text-[11px] text-muted mb-3 leading-relaxed">
-              {done
-                ? "You've cleared this one. Hit Practice to run it again — XP only, no progress changes."
-                : unlocked
-                ? "Click Start to begin this lesson."
-                : "Locked. Pass a calibrated test (20 Q · 5 hearts) to jump here and mark every previous lesson complete."}
-            </div>
-            <div className="flex gap-2">
-              {done ? (
-                // Completed lesson → "Practice" only.
-                <button
-                  onClick={(e) => { e.stopPropagation(); onStart(); requestClose(); }}
-                  data-testid={`lesson-path-practice-${lesson.id}`}
-                  className="flex-1 brut-border brut-shadow-sm bg-emerald-500 text-white font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-                >
-                  Practice
-                </button>
-              ) : unlocked ? (
-                // Next-up unlocked lesson → "Start" only (no Jump, since the
-                // user's already at the right spot).
-                <button
-                  onClick={(e) => { e.stopPropagation(); onStart(); requestClose(); }}
-                  data-testid={`lesson-path-start-${lesson.id}`}
-                  className="flex-1 brut-border brut-shadow-sm bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-                >
-                  Start
-                </button>
-              ) : (
-                // Locked / further ahead → "Jump here" only.
-                <button
-                  onClick={(e) => { e.stopPropagation(); onJump(); requestClose(); }}
-                  data-testid={`lesson-path-jump-${lesson.id}`}
-                  className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
-                >
-                  Jump here
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            {innerIcon}
+          </button>
+        </PopoverTrigger>
+      </div>
+      <PopoverContent
+        align="center"
+        side="top"
+        sideOffset={10}
+        collisionPadding={16}
+        className="w-60 surface brut-border brut-shadow rounded-md p-3 text-left"
+        data-testid={`lesson-path-popover-${lesson.id}`}
+      >
+        <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-bold">
+          {unit.title}
+        </div>
+        <div className="font-bold text-fg text-sm mb-1">
+          {lesson.label}
+          {lesson.boss && <span className="ml-1 text-amber-500">★</span>}
+        </div>
+        <div className="text-[11px] text-muted mb-3 leading-relaxed">
+          Locked. Pass a calibrated test (20 Q · 5 hearts) to jump here and mark every previous lesson complete.
+        </div>
+        <button
+          onClick={() => { setOpen(false); onJump(); }}
+          data-testid={`lesson-path-jump-${lesson.id}`}
+          className="w-full brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+        >
+          Jump here
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
