@@ -203,6 +203,32 @@ class UserEditIn(BaseModel):
     role: Optional[str] = None  # "user" | "admin"
 
 
+class ProfileUpdateIn(BaseModel):
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    is_private: Optional[bool] = None
+
+
+class FriendCodeIn(BaseModel):
+    code: str
+
+
+class GemsAdjustIn(BaseModel):
+    delta: int  # positive to grant, negative to spend
+    reason: Optional[str] = None
+
+
+class CMSKVIn(BaseModel):
+    key: str
+    value: Optional[str] = None  # if None → delete
+
+
+def _gen_friend_code() -> str:
+    import secrets, string
+    alphabet = string.ascii_uppercase + string.digits
+    return "TT-" + "".join(secrets.choice(alphabet) for _ in range(5))
+
+
 # ------------------------------------------------------------------ APP
 app = FastAPI(title="timestables.ca")
 api = APIRouter(prefix="/api")
