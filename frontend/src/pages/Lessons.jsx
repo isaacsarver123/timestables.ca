@@ -985,6 +985,16 @@ function LessonPath({
                 const lessonDone = isLessonCompleted(lesson.id);
                 const isNext = lesson.id === nextLessonId;
                 const offset = Math.sin((i / 3) * Math.PI) * 90;
+                // Put the popover on the side OPPOSITE the neighbouring node
+                // with the largest offset, so it never overlaps the next/prev
+                // lesson in the zig-zag.
+                const prevOffset = i > 0 ? Math.sin(((i - 1) / 3) * Math.PI) * 90 : 0;
+                const nextOffset = i < unit.lessons.length - 1 ? Math.sin(((i + 1) / 3) * Math.PI) * 90 : 0;
+                const neighbourOffset = Math.abs(nextOffset) > Math.abs(prevOffset) ? nextOffset : prevOffset;
+                // If neighbour is to the right of THIS node (in screen coords:
+                // neighbour_offset > this_offset), put popover on the LEFT.
+                // Otherwise on the right.
+                const sideHint = (neighbourOffset - offset) > 0 ? "left" : "right";
                 return (
                   <div
                     key={lesson.id}
@@ -1000,6 +1010,7 @@ function LessonPath({
                       isOpen={openId === lesson.id}
                       requestOpen={() => setOpenId(lesson.id)}
                       requestClose={() => setOpenId((cur) => (cur === lesson.id ? null : cur))}
+                      sideHint={sideHint}
                       onStart={() => onStart(lesson, unit)}
                       onJump={() => onJumpHere(lesson)}
                     />
