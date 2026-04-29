@@ -1,0 +1,86 @@
+{
+  "theme": "light",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) / Neo-Brutalism",
+  "colors": {
+    "background": "#FAFAFA",
+    "surface": "#FFFFFF",
+    "primary": "#2563EB",
+    "secondary": "#F4F4F5",
+    "accent_coin": "#F59E0B",
+    "accent_danger": "#EF4444",
+    "accent_success": "#10B981",
+    "text_primary": "#09090B",
+    "text_secondary": "#52525B",
+    "border": "#18181B"
+  },
+  "typography": {
+    "font_heading": "Outfit, sans-serif",
+    "font_body": "Outfit, sans-serif",
+    "font_mono": "JetBrains Mono, monospace",
+    "h1": "text-5xl sm:text-6xl font-black tracking-tighter text-zinc-950",
+    "h2": "text-3xl sm:text-4xl font-bold tracking-tight text-zinc-950",
+    "h3": "text-xl sm:text-2xl font-bold tracking-tight text-zinc-950",
+    "body": "text-base font-medium text-zinc-800 leading-relaxed",
+    "mono_display": "font-mono text-7xl sm:text-8xl font-black tracking-tight text-zinc-950",
+    "label_overline": "text-xs font-bold uppercase tracking-[0.2em] text-zinc-500"
+  },
+  "spacing_and_layout": {
+    "container_padding": "p-6 sm:p-8 lg:p-12",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-6 md:gap-8",
+    "card_style": "bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_#18181B] rounded-none p-6 md:p-8 transition-transform hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[8px_8px_0px_#18181B]"
+  },
+  "components": {
+    "button_primary": "bg-blue-600 text-white border-2 border-zinc-900 shadow-[4px_4px_0px_#18181B] font-bold text-lg px-8 py-4 hover:bg-blue-700 active:shadow-[0px_0px_0px_#18181B] active:translate-y-1 active:translate-x-1 transition-all",
+    "button_secondary": "bg-white text-zinc-900 border-2 border-zinc-900 shadow-[4px_4px_0px_#18181B] font-bold text-lg px-8 py-4 hover:bg-zinc-50 active:shadow-[0px_0px_0px_#18181B] active:translate-y-1 active:translate-x-1 transition-all",
+    "input_field": "bg-white border-2 border-zinc-900 text-center font-mono text-4xl p-4 focus:outline-none focus:ring-4 focus:ring-blue-500/20 placeholder:text-zinc-300",
+    "progress_bar": "h-4 bg-zinc-200 border-2 border-zinc-900 w-full overflow-hidden",
+    "progress_fill": "h-full bg-blue-600 border-r-2 border-zinc-900",
+    "powerup_card": "bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_#18181B] p-4 flex flex-col items-center gap-3 cursor-pointer hover:bg-amber-50"
+  },
+  "motion_and_interaction": {
+    "hover_state": "Translate -x-1 -y-1, increase hard shadow. Text color shift.",
+    "click_state": "Translate x-1 y-1, remove hard shadow (press down effect).",
+    "success_feedback": "Scale pop [0.8, 1.2, 1], color flash green. Coin icons fly up.",
+    "error_feedback": "Horizontal shake (x: [-10, 10, -10, 10, 0]), red border flash.",
+    "combo_multiplier": "Framer motion scale loop (scale: [1, 1.05, 1]) when active."
+  },
+  "media_and_icons": {
+    "icon_library": "lucide-react (for standard UI) + iconoir-react (for playful/gamified icons)",
+    "images": [
+      {
+        "category": "background_base",
+        "url": "https://static.prod-images.emergentagent.com/jobs/198d365d-03e4-4fe6-ab2a-48f54d1bee3e/images/83cca1df79036ee228636f0c8219e03aa1803522ba3cd07c01c6c86eae26c876.png",
+        "description": "Abstract light geometric background for the main dashboard and menus. Use with low opacity (e.g. 10-20%) or blend-mode multiply.",
+        "usage": "Use as a fixed background covering the entire viewport for the home and menu screens to give a high-end tech feel."
+      },
+      {
+        "category": "background_boss",
+        "url": "https://static.prod-images.emergentagent.com/jobs/198d365d-03e4-4fe6-ab2a-48f54d1bee3e/images/540ef56d1c57d15ebb03a6da139e2d0e77db394ea9db7e86690a2853b854aec3.png",
+        "description": "Edgy, high-contrast grey background with subtle red accents for Boss levels.",
+        "usage": "Use as the background for the Boss Level game mode to instantly change the vibe to intense and challenging."
+      },
+      {
+        "category": "icon_powerup",
+        "url": "https://static.prod-images.emergentagent.com/jobs/198d365d-03e4-4fe6-ab2a-48f54d1bee3e/images/c1552e67f49b554bb23ceee708c596ef59944f3184eb50e807af66c91fb10d60.png",
+        "description": "3D silver and gold hourglass/coin icon for the shop and gamified currency display.",
+        "usage": "Use as an illustrative asset in the Powerup Shop header or next to the user's total coin balance."
+      }
+    ]
+  },
+  "accessibility": {
+    "contrast": "All text over backgrounds meets WCAG AA 4.5:1 minimum. Heavy use of pure black (#09090B) on white (#FFFFFF) ensures optimal readability.",
+    "focus_states": "All interactive elements must use focus:outline-none focus:ring-4 focus:ring-blue-500/30.",
+    "motion": "Respect prefers-reduced-motion. Disable screen shake and heavy scaling for users who opt out."
+  },
+  "instructions_to_main_agent": [
+    "Build a gamified math app strictly avoiding childish aesthetics. Emulate a 'Neo-Brutalist Control Room' vibe.",
+    "Use solid white (#FFFFFF) for surfaces with hard 2px black (#18181B) borders and solid, unblurred shadows (e.g., shadow-[4px_4px_0px_#18181B]). Do not use soft drop shadows.",
+    "Implement 'Outfit' for all UI text and 'JetBrains Mono' specifically for the math questions, timers, and combo counters to give a precise, technical feel.",
+    "Game Modes should be visually distinct: Quick-fire uses standard white background, Boss mode uses the provided 'background_boss' image with darker/red accents.",
+    "Use Framer Motion for crucial gamification feedback: popping coins on correct answers, shaking the input on incorrect answers, and pulsing the combo multiplier.",
+    "Store progress, coins, and unlocked levels in localStorage. No backend required for v1.",
+    "Ensure all buttons and inputs have the specified hard borders and translate interactions to feel tactile and 'clicky'.",
+    "All interactive and key informational elements MUST include a data-testid attribute in kebab-case (e.g., data-testid='mode-select-quickfire').",
+    "Note: The project uses .js/.jsx files, not .tsx. Ensure all components are written in standard JavaScript with React."
+  ]
+}
