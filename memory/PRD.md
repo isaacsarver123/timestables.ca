@@ -79,3 +79,13 @@
 - **Flashcards: 3D flip animation** (framer-motion rotateY 0↔180° with backface-visibility), deck draws 12×N from all selected tables and shuffles.
 - **Knew it / Missed it buttons** are now solid `bg-emerald-500` / `bg-rose-500` with white bold text — fully opaque in both light and dark modes.
 - iteration_5: 100% pass.
+
+### Iteration 6 + 7 (this turn)
+- **Stats: 30-day progress chart** (recharts `AreaChart` of correct + total per day; uses new `state.history` daily buckets written by `recordAnswer`).
+- **Settings page** (`/settings`, header nav-settings): Preferences (theme + sound), Account placeholder ("Sign-in coming soon"), Data (export/import JSON), Reset (preferences / stats / everything) — each with confirm dialog.
+- **Daily-streak counter**: `state.dailyStreak = { count, lastDate }`. Yesterday → +1, same date → no-op, otherwise → 1. Displayed on Daily page (badge) and in header (hud-streak when > 0).
+- **Decimal multiplication mode** in Long Multiplication (`diff-decimals`). Question.jsx allows `.` in input; submit uses `parseFloat` with tolerance.
+- **Long-division-with-remainder** mode in Long Division (`diff-rem-easy/medium/hard`). Dual-input UI (`rem-q-input`, `rem-r-input`).
+- **Step-by-Step Long Multiplication** (`diff-step` in LongMul) — new `StepMultiplication` component with canonical paper layout, partial-product input slots, then a final-sum input.
+- **Step-difficulty selector** for Step-by-Step Long Division: brief is now 3 sections × 3 levels (`diff-step-easy/medium/hard`).
+- iteration_6 → iteration_7 (after fix): 100% pass on the retest.

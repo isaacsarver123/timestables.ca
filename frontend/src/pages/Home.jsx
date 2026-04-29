@@ -61,9 +61,6 @@ const Home = () => {
         </p>
       </section>
 
-      {/* Tables */}
-      <RangeSelector />
-
       {/* Modes */}
       <section data-testid="modes-section" className="space-y-3">
         <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
@@ -98,6 +95,9 @@ const Home = () => {
           })}
         </div>
       </section>
+
+      {/* Tables */}
+      <RangeSelector />
 
       {/* Operation + answer style — compact, secondary */}
       <OpPicker />
