@@ -11,6 +11,7 @@ const DEFAULT_STATE = {
   bossLevelsCleared: 0,
   selectedTables: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
   opMode: "mul", // 'mul' | 'div' | 'mixed'
+  inputMode: "type", // 'type' | 'choices'
   soundOn: true,
   theme: "light", // 'light' | 'dark'
   daily: { date: null, score: 0, total: 0, completed: false },
@@ -151,6 +152,10 @@ export function setSelectedTables(tables) {
 
 export function setOpMode(op) {
   updateState((s) => ({ ...s, opMode: op }));
+}
+
+export function setInputMode(mode) {
+  updateState((s) => ({ ...s, inputMode: mode }));
 }
 
 export function setSoundOn(on) {

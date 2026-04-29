@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Skull, X, Heart, Plus, SkipForward } from "lucide-react";
 import Question from "@/components/Question";
+import ChoiceGrid from "@/components/ChoiceGrid";
 import {
   getState,
   subscribe,
@@ -29,6 +30,7 @@ const Boss = () => {
   const [question, setQuestion] = useState(null);
   const [value, setValue] = useState("");
   const [status, setStatus] = useState("idle");
+  const [lastChoice, setLastChoice] = useState(null);
   const startTs = useRef(performance.now());
 
   const level = state.bossLevel;
@@ -44,6 +46,7 @@ const Boss = () => {
     });
     setQuestion(q);
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     setTime(cfg.timePerQ);
     startTs.current = performance.now();
@@ -61,6 +64,7 @@ const Boss = () => {
     });
     setQuestion(q);
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     setTime(cfg.timePerQ);
     startTs.current = performance.now();
@@ -98,11 +102,10 @@ const Boss = () => {
     return () => clearInterval(id);
   }, [phase, status, time, question, cfg.timePerQ, loseLife]);
 
-  const submit = () => {
+  const evaluate = (guess) => {
     if (phase !== "play" || status !== "idle") return;
-    if (value === "" || value === "-") return;
     const ms = Math.round(performance.now() - startTs.current);
-    const correct = parseInt(value, 10) === question.answer;
+    const correct = guess === question.answer;
     recordAnswer({ a: question.a, b: question.b, op: question.op, correct, ms });
     if (correct) {
       addCoinsAndXp(3, 8);
@@ -123,8 +126,14 @@ const Boss = () => {
     } else {
       setStatus("wrong");
       sfx.wrong();
-      setTimeout(() => loseLife(), 500);
+      if (getState().inputMode === "choices") setLastChoice(guess);
+      setTimeout(() => loseLife(), 600);
     }
+  };
+
+  const submit = () => {
+    if (value === "" || value === "-") return;
+    evaluate(parseInt(value, 10));
   };
 
   const useExtraTime = () => {
@@ -241,14 +250,24 @@ const Boss = () => {
           </div>
 
           <div className="surface brut-border brut-shadow p-7 sm:p-9">
-            <Question
-              question={question}
-              value={value}
-              onChange={setValue}
-              onSubmit={submit}
-              status={status}
-              disabled={status !== "idle"}
-            />
+            {state.inputMode === "choices" ? (
+              <ChoiceGrid
+                question={question}
+                onAnswer={evaluate}
+                status={status}
+                disabled={status !== "idle"}
+                lastChoice={lastChoice}
+              />
+            ) : (
+              <Question
+                question={question}
+                value={value}
+                onChange={setValue}
+                onSubmit={submit}
+                status={status}
+                disabled={status !== "idle"}
+              />
+            )}
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2.5">

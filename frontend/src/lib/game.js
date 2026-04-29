@@ -220,6 +220,75 @@ export function flashcardSet(table) {
   });
 }
 
+// Long-division algorithm steps for guided practice.
+// Returns { steps: [...], quotient, dividend, divisor }.
+// Each step: { partial, digit, quotientDigit, product, remainder, i }
+// where `partial` is the running dividend chunk being divided at this step,
+// `digit` is the digit just brought down, `i` is the position in the dividend.
+export function longDivisionSteps(dividend, divisor) {
+  if (divisor <= 0) return { steps: [], quotient: 0, dividend, divisor };
+  const digits = String(dividend).split("").map(Number);
+  const steps = [];
+  let acc = 0;
+  let started = false;
+  let quotientStr = "";
+  for (let i = 0; i < digits.length; i++) {
+    acc = acc * 10 + digits[i];
+    if (acc < divisor && !started) {
+      continue;
+    }
+    started = true;
+    const q = Math.floor(acc / divisor);
+    const product = q * divisor;
+    const remainder = acc - product;
+    steps.push({
+      partial: acc,
+      digit: digits[i],
+      quotientDigit: q,
+      product,
+      remainder,
+      i,
+    });
+    acc = remainder;
+    quotientStr += q;
+  }
+  return {
+    steps,
+    quotient: parseInt(quotientStr || "0", 10),
+    dividend,
+    divisor,
+  };
+}
+
+// Generate a long-division problem suited for step-by-step practice.
+// Ensures multi-step (>= 2 steps) with whole-number quotient.
+export function generateStepDivision(opts = {}) {
+  const { rng = Math.random, lastKey, difficulty = "medium" } = opts;
+  for (let i = 0; i < 30; i++) {
+    let divisor, quotient;
+    if (difficulty === "easy") {
+      divisor = Math.floor(rng() * 5) + 3; // 3-7
+      quotient = Math.floor(rng() * 80) + 20; // 20-99 (2-digit quotient)
+    } else if (difficulty === "hard") {
+      divisor = Math.floor(rng() * 60) + 12; // 12-71
+      quotient = Math.floor(rng() * 800) + 100; // 100-899 (3-digit)
+    } else {
+      divisor = Math.floor(rng() * 18) + 6; // 6-23
+      quotient = Math.floor(rng() * 400) + 100; // 100-499
+    }
+    const dividend = divisor * quotient;
+    const key = `sd_${dividend}/${divisor}`;
+    if (key === lastKey) continue;
+    const info = longDivisionSteps(dividend, divisor);
+    if (info.steps.length >= 2) {
+      return { ...info, key };
+    }
+  }
+  // fallback
+  const info = longDivisionSteps(13032, 24);
+  return { ...info, key: "sd_13032/24_f" };
+}
+
 // Tips per table for Learn mode
 export function tableTips(n) {
   const tips = {

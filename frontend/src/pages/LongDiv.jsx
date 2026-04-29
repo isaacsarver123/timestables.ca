@@ -1,17 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, X, Divide } from "lucide-react";
+import { ArrowLeft, X, Divide, ArrowRight } from "lucide-react";
 import Question from "@/components/Question";
+import StepDivision from "@/components/StepDivision";
 import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
-import { generateLongDiv } from "@/lib/game";
+import { generateLongDiv, generateStepDivision } from "@/lib/game";
 import { sfx } from "@/lib/sound";
 
 const ROUND_LEN = 8;
+const STEP_ROUND_LEN = 4;
 const DIFFS = [
   { key: "easy", label: "Easy", sub: "÷ 2–7, quotient 11–19" },
   { key: "medium", label: "Medium", sub: "÷ 3–14, quotient 11–50" },
   { key: "hard", label: "Hard", sub: "÷ 7–24, quotient 11–100" },
+  { key: "step", label: "Step-by-Step", sub: "Solve like on paper, digit by digit", step: true },
 ];
 
 const LongDiv = () => {
@@ -30,7 +33,11 @@ const LongDiv = () => {
     setDifficulty(diff);
     setIdx(0);
     setCorrect(0);
-    setQuestion(generateLongDiv({ difficulty: diff }));
+    if (diff === "step") {
+      setQuestion(generateStepDivision({ difficulty: "medium" }));
+    } else {
+      setQuestion(generateLongDiv({ difficulty: diff }));
+    }
     setValue("");
     setStatus("idle");
     setShowHint(false);
@@ -38,13 +45,20 @@ const LongDiv = () => {
     startTs.current = performance.now();
   };
 
+  const isStep = difficulty === "step";
+  const totalLen = isStep ? STEP_ROUND_LEN : ROUND_LEN;
+
   const next = () => {
-    if (idx + 1 >= ROUND_LEN) {
+    if (idx + 1 >= totalLen) {
       setPhase("result");
       return;
     }
     setIdx((i) => i + 1);
-    setQuestion((q) => generateLongDiv({ difficulty, lastKey: q?.key }));
+    if (isStep) {
+      setQuestion((q) => generateStepDivision({ difficulty: "medium", lastKey: q?.key }));
+    } else {
+      setQuestion((q) => generateLongDiv({ difficulty, lastKey: q?.key }));
+    }
     setValue("");
     setStatus("idle");
     setShowHint(false);
@@ -102,18 +116,25 @@ const LongDiv = () => {
             Choose difficulty
           </div>
           <h2 className="text-xl font-bold tracking-tight text-fg mt-1">
-            {ROUND_LEN} questions · whole-number quotients
+            Choose how to practise
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
             {DIFFS.map((d) => (
               <button
                 key={d.key}
                 onClick={() => begin(d.key)}
                 data-testid={`diff-${d.key}`}
-                className="brut-border brut-shadow surface p-4 text-left hover:-translate-x-0.5 hover:-translate-y-0.5 hover:brut-shadow-lg transition-all"
+                className={`brut-border brut-shadow p-4 text-left hover:-translate-x-0.5 hover:-translate-y-0.5 hover:brut-shadow-lg transition-all ${
+                  d.step ? "bg-rose-100 dark:bg-rose-500/15" : "surface"
+                }`}
               >
                 <div className="text-base font-bold text-fg">{d.label}</div>
                 <div className="text-xs text-muted mt-0.5">{d.sub}</div>
+                {d.step && (
+                  <div className="text-[10px] uppercase tracking-widest text-rose-700 dark:text-rose-400 font-bold mt-2">
+                    NEW · guided practice
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -129,23 +150,56 @@ const LongDiv = () => {
             <div className="text-sm text-fg font-semibold">
               {DIFFS.find((d) => d.key === difficulty).label} ·{" "}
               <span className="font-mono">
-                {idx + 1}/{ROUND_LEN}
+                {idx + 1}/{totalLen}
               </span>
             </div>
             <div className="font-mono text-sm text-muted">
               Correct: <span className="text-fg font-bold">{correct}</span>
             </div>
           </div>
-          <div className="surface brut-border brut-shadow p-7 sm:p-9">
-            <Question
-              question={question}
-              value={value}
-              onChange={setValue}
-              onSubmit={submit}
-              status={status}
-              hint={showHint ? `${question.a} ÷ ${question.b} = ${question.answer}` : null}
-            />
-          </div>
+          {isStep ? (
+            <div
+              className="surface brut-border brut-shadow p-5 sm:p-7"
+              data-testid="step-play-card"
+            >
+              <StepDivision
+                problem={question}
+                onComplete={() => {
+                  addCoinsAndXp(8, 12);
+                  setCorrect((c) => c + 1);
+                }}
+                onWrong={() => {
+                  recordAnswer({
+                    a: question.dividend,
+                    b: question.divisor,
+                    op: "÷",
+                    correct: false,
+                    ms: 0,
+                  });
+                }}
+              />
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={next}
+                  data-testid="step-next"
+                  className="surface brut-border brut-shadow font-bold text-sm px-5 py-2 hover:surface-2 active:translate-x-1 active:translate-y-1 active:brut-shadow-none transition-all uppercase tracking-wider text-fg flex items-center gap-2"
+                >
+                  Next problem <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="surface brut-border brut-shadow p-7 sm:p-9">
+              <Question
+                question={question}
+                value={value}
+                onChange={setValue}
+                onSubmit={submit}
+                status={status}
+                hint={showHint ? `${question.a} ÷ ${question.b} = ${question.answer}` : null}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -160,7 +214,7 @@ const LongDiv = () => {
             Round complete
           </div>
           <h2 className="text-4xl sm:text-5xl font-black tracking-tighter mt-1 text-fg">
-            {correct}<span className="text-muted">/{ROUND_LEN}</span>
+            {correct}<span className="text-muted">/{totalLen}</span>
           </h2>
           <div className="mt-6 flex flex-wrap justify-center gap-2.5">
             <button

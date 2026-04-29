@@ -1,53 +1,67 @@
-# TIMES.ARENA — Gamified Times Tables PRD
+# Times Tables — Practice App PRD
 
 ## Original problem statement
-> "make me an app that teaches someone timestables in a gamified way, not childish but just to help learn. make it a website thta i can acess too"
+"make me an app that teaches someone timestables in a gamified way, not childish but just to help learn. make it a website thta i can acess too"
 
-## User choices (locked-in 2026-02)
+## User choices (locked-in)
 - Audience: Teen / Adult — NOT childish
-- Game modes: All three, user-selectable (Quick-Fire, Streak, Boss)
-- Tables range: User picks any subset of 1×–12× via toggle / presets
-- Currency: Coins + XP, with powerup shop
-- Auth/Leaderboard: Deferred (user said "not for now"); v1 is local-only
-- Aesthetic: Light grey/white palette → designer chose Neo-Brutalism (Outfit + JetBrains Mono, white surfaces, 2px black borders, hard 4px shadows, blue/amber/red accents)
+- Game modes: All three picks (Quick-Fire, Streak, Boss) + Daily + Long-form
+- Tables range: User-selectable subset of 1×–20× via grid + presets
+- Currency: Coins + XP + powerup shop
+- Auth/Leaderboard: deferred (local-only)
+- Aesthetic: WHITE / light theme primary with neo-brutalist black outlines + 4px hard shadows. Dark mode toggle in header.
+- Sound effects: on by default, toggle in header.
+- Operation: × / ÷ / Both — picker prominent on homepage.
+- Learn methods: Table view + Tips, Flashcards, Multiple Choice, Skip Counting, 10-Q Drill.
+- Long-form practice: Long Multiplication (2×1, 2×2, 3×2) and Long Division (whole-number quotients) — 3 difficulty tiers each.
 
 ## Architecture
-- Frontend-only React app (CRA + craco). State lives in `localStorage` under key `tt_arena_state_v1`.
-- Routes: `/`, `/play/quickfire`, `/play/streak`, `/play/boss`, `/stats`, `/shop`.
-- No backend/MongoDB usage in v1 (default `/api` route untouched).
+- Frontend-only React app (CRA + craco). State in localStorage `tt_arena_state_v2`.
+- Routes: `/`, `/learn`, `/play/quickfire`, `/play/streak`, `/play/boss`, `/play/daily`, `/play/long-mul`, `/play/long-div`, `/stats`, `/shop`.
+- No backend usage in v3.
 
-## What's been implemented (2026-02)
-- Brand shell `Layout` with persistent HUD (coins, level + XP bar, nav).
-- `RangeSelector` — toggle each of 12 tables + 4 presets (Easy 2–5, Core 2–10, All 1–12, Tough).
-- Quick-Fire: 60-second timer, score, combo with multiplier coin bonus, coin-pop + shake animations, run-end results screen.
-- Streak: endless mode that breaks on first wrong; combo pulses while > 0.
-- Boss: progressive levels (`bossConfig`), 3 lives, per-question timer, brief → play → VICTORY/DEFEAT screen, level-up reward.
-- Powerups (in-game + shop): Extra Time (+15s, 30c), Skip (20c), Freeze (5s pause, 40c), Coin Doubler (75c). Stack across runs.
-- Stats page: total correct/wrong/accuracy, per-table progress bars + avg solve time, reset-all button.
-- Shop page: buy with coins, owned counter, sonner toasts.
-- localStorage persistence verified by testing agent.
-- All interactive elements have `data-testid` attrs.
+## Implemented (rolling)
+### Iteration 1 (MVP)
+- Layout shell, Range selector 1–12, Quick-Fire/Streak/Boss, Stats, Shop.
+
+### Iteration 2 (theme + learn + daily + sound + division)
+- Light/Dark theme toggle (CSS vars, html.dark class).
+- Tables extended to 1–20.
+- Operation modes ×/÷/Both.
+- Learn page (table view + tips + 10-Q drill).
+- Daily Challenge (30 questions, seeded by date, once per day).
+- Web Audio sfx (correct/wrong/coin/levelup), header toggle.
+
+### Iteration 3 (this turn)
+- Prominent Operation picker (`OpPicker`) on home — Multiplication/Division/Both as 3 tiles.
+- Learn methods expanded: tabs for Table, Flashcards, Multiple Choice, Skip Counting, Drill.
+- Flashcards: 12-card front/back flip set, "Knew it" / "Missed it" tracking.
+- Multiple Choice: 4 options, instant feedback.
+- Skip Counting: fill-in-the-blank in a multiples sequence.
+- Long Multiplication mode (`/play/long-mul`) with Easy/Medium/Hard.
+- Long Division mode (`/play/long-div`) with Easy/Medium/Hard.
+- Op chips removed from RangeSelector; live in OpPicker now.
 
 ## Personas
-- **Refresher** — adult who wants to relearn or get faster on multiplication.
-- **Test Prepper** — teen drilling specific tables (toggles only the weak ones).
-- **Speed Junkie** — competitive solo player chasing best streak / Quick-Fire high.
+- Refresher / Teen / Speed Junkie / Multi-digit returner.
 
 ## Backlog
 ### P0 (next)
-- User accounts + login (deferred from v1) for cross-device save.
-- Global leaderboard for Quick-Fire and Streak.
+- User accounts + login + cross-device sync.
+- Global leaderboard.
 
 ### P1
-- Sound effects (correct ding, wrong buzz, coin clink) with mute toggle.
-- Daily challenge with fixed seed for fair leaderboard runs.
-- More boss enemies (currently 11 named, then cycles).
+- Decimal multiplication mode (e.g. 1.5 × 8).
+- Long-division **with remainder** option.
+- Spaced-repetition flashcards (review missed cards).
+- Daily streak counter (consecutive days completed).
 
 ### P2
-- Division & mixed-mode questions.
-- Shareable result cards (PNG export of run summary).
-- Achievement/badge system (e.g., "All 7s in <5s avg").
+- Achievements / badges.
+- Shareable result cards (PNG export).
 - Onboarding tour for first-time visitors.
 
-## Testing
-- iteration_1.json: 100% frontend pass, no issues. App confirmed end-to-end functional.
+## Test history
+- iteration_1: 100% pass
+- iteration_2: 100% pass
+- iteration_3: 100% pass (all 14 features verified)

@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only testing for Iteration 4 (pick-the-answer ChoiceGrid mode, reordered Home with compact OpPicker below modes, and step-by-step Long Division walkthrough). All critical flows verified via Playwright against the public URL. 100% pass rate on executed scenarios.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": [
+    "Home page order: RangeSelector -> modes-section (top=598) -> op-picker (817) -> long-section (942). PASS",
+    "OpPicker exposes op-mul/op-div/op-mixed and input-type/input-choices chips; clicking input-choices persists inputMode='choices' to localStorage. PASS",
+    "Quick-Fire (/play/quickfire) with inputMode='choices' renders ChoiceGrid with 4 buttons data-testid=choice-{value}. PASS",
+    "Quick-Fire wrong click: wrong button class gains 'red', correct gains 'emerald', advances ~800ms, combo resets. PASS",
+    "Quick-Fire correct click: score increments (0->1), coins awarded. PASS",
+    "Quick-Fire inputMode='type' still renders typed Question input (no ChoiceGrid). PASS",
+    "Streak (/play/streak) in choices mode renders ChoiceGrid; wrong click ends run (streak-results shown after ~700ms). PASS",
+    "Boss (/play/boss) in choices mode renders ChoiceGrid after start-boss; wrong click advances (life-loss flow). PASS",
+    "Long Division brief shows 4 difficulty tiles: diff-easy, diff-medium, diff-hard, diff-step (with NEW badge). PASS",
+    "Step-by-Step (/play/long-div -> diff-step): step-division renders with q-input-0 at correct dividend column; step-prompt shows 'How many times does {divisor} go into {partial}?'; step-submit present. PASS",
+    "Step wrong answer: shake, q-input-0 remains, q-digit-0 NOT revealed (no advance). PASS",
+    "Step correct answer via Enter: q-digit-0 reveals value, advances through steps, finally shows step-done with full equation (verified 2190 ÷ 10 = 219). PASS",
+    "Step round uses STEP_ROUND_LEN=4 denominator; step-next button advances to 2/4. PASS",
+    "Step rewards: coins +8 after completing a problem; totalWrong incremented on miss. PASS"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StepDivision: If a generated problem has leading dividend digits smaller than divisor, those columns render as empty (no quotient digit). Intentional and documented, but UX could add a visual hint (e.g., faded 0 or arrow). Not a bug.",
+    "LongDiv.jsx always uses difficulty='medium' for generateStepDivision — no user-selectable step difficulty yet. Future enhancement.",
+    "StepDivision recordAnswer on wrong uses dividend/divisor as a/b with op='÷' — stats bucketing by divisor is consistent with existing recordAnswer logic. OK."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not requested)", "frontend": "100%"},
+  "seed_data_creation": "None. Used localStorage to toggle inputMode='choices' before navigating to play pages.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 4 frontend fully passes. Use localStorage tt_arena_state_v2 with inputMode='choices' to enter ChoiceGrid flows. For step-by-step, quotient digit at step k is parseInt(prompt partial / prompt divisor). Boss start control is data-testid='start-boss' (not boss-start). Streak shows streak-results on fail. Storage key confirmed: tt_arena_state_v2."
+}

@@ -61,9 +61,6 @@ const Home = () => {
         </p>
       </section>
 
-      {/* Operation */}
-      <OpPicker />
-
       {/* Tables */}
       <RangeSelector />
 
@@ -101,6 +98,9 @@ const Home = () => {
           })}
         </div>
       </section>
+
+      {/* Operation + answer style — compact, secondary */}
+      <OpPicker />
 
       {/* Long-form */}
       <section data-testid="long-section" className="space-y-3">

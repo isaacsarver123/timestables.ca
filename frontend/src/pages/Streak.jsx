@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Flame, X, SkipForward } from "lucide-react";
 import Question from "@/components/Question";
+import ChoiceGrid from "@/components/ChoiceGrid";
 import {
   getState,
   subscribe,
@@ -28,6 +29,7 @@ const Streak = () => {
   const [running, setRunning] = useState(true);
   const [coinsEarned, setCoinsEarned] = useState(0);
   const [poppers, setPoppers] = useState([]);
+  const [lastChoice, setLastChoice] = useState(null);
   const startTs = useRef(performance.now());
 
   const next = () => {
@@ -38,15 +40,15 @@ const Streak = () => {
       })
     );
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     startTs.current = performance.now();
   };
 
-  const submit = () => {
+  const evaluate = (guess) => {
     if (!running || status !== "idle") return;
-    if (value === "" || value === "-") return;
     const ms = Math.round(performance.now() - startTs.current);
-    const correct = parseInt(value, 10) === question.answer;
+    const correct = guess === question.answer;
     recordAnswer({ a: question.a, b: question.b, op: question.op, correct, ms });
     if (correct) {
       const newCombo = combo + 1;
@@ -65,11 +67,17 @@ const Streak = () => {
     } else {
       setStatus("wrong");
       sfx.wrong();
+      if (getState().inputMode === "choices") setLastChoice(guess);
       setTimeout(() => {
         setRunning(false);
         recordRunResult({ mode: "streak", score: combo, streak: combo });
-      }, 600);
+      }, 700);
     }
+  };
+
+  const submit = () => {
+    if (value === "" || value === "-") return;
+    evaluate(parseInt(value, 10));
   };
 
   const useSkip = () => {
@@ -80,6 +88,7 @@ const Streak = () => {
   const restart = () => {
     setQuestion(generateQuestion(getState().selectedTables, { op: getState().opMode }));
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     setCombo(0);
     setCoinsEarned(0);
@@ -140,14 +149,24 @@ const Streak = () => {
         </AnimatePresence>
 
         {running ? (
-          <Question
-            question={question}
-            value={value}
-            onChange={setValue}
-            onSubmit={submit}
-            status={status}
-            disabled={!running}
-          />
+          state.inputMode === "choices" ? (
+            <ChoiceGrid
+              question={question}
+              onAnswer={evaluate}
+              status={status}
+              disabled={!running}
+              lastChoice={lastChoice}
+            />
+          ) : (
+            <Question
+              question={question}
+              value={value}
+              onChange={setValue}
+              onSubmit={submit}
+              status={status}
+              disabled={!running}
+            />
+          )
         ) : (
           <div className="text-center py-4" data-testid="streak-results">
             <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">

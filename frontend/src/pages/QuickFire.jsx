@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Clock, Flame, X, Plus, SkipForward, Snowflake, Sparkles } from "lucide-react";
 import Question from "@/components/Question";
+import ChoiceGrid from "@/components/ChoiceGrid";
 import {
   getState,
   subscribe,
@@ -34,6 +35,7 @@ const QuickFire = () => {
   const [doubler, setDoubler] = useState(false);
   const [frozen, setFrozen] = useState(false);
   const [poppers, setPoppers] = useState([]);
+  const [lastChoice, setLastChoice] = useState(null);
   const startTs = useRef(performance.now());
 
   const finish = useCallback(() => {
@@ -59,15 +61,15 @@ const QuickFire = () => {
       })
     );
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     startTs.current = performance.now();
   };
 
-  const submit = () => {
+  const evaluate = (guess) => {
     if (!running || status !== "idle") return;
-    if (value === "" || value === "-") return;
     const ms = Math.round(performance.now() - startTs.current);
-    const correct = parseInt(value, 10) === question.answer;
+    const correct = guess === question.answer;
     recordAnswer({ a: question.a, b: question.b, op: question.op, correct, ms });
     if (correct) {
       const baseCoins = 1 + Math.floor(combo / 5);
@@ -88,8 +90,18 @@ const QuickFire = () => {
       setStatus("wrong");
       setCombo(0);
       sfx.wrong();
-      setTimeout(() => setStatus("idle"), 450);
+      if (getState().inputMode === "choices") {
+        setLastChoice(guess);
+        setTimeout(() => next(), 800);
+      } else {
+        setTimeout(() => setStatus("idle"), 450);
+      }
     }
+  };
+
+  const submit = () => {
+    if (value === "" || value === "-") return;
+    evaluate(parseInt(value, 10));
   };
 
   const useExtraTime = () => {
@@ -114,6 +126,7 @@ const QuickFire = () => {
   const restart = () => {
     setQuestion(generateQuestion(getState().selectedTables, { op: getState().opMode }));
     setValue("");
+    setLastChoice(null);
     setStatus("idle");
     setTime(ROUND_SECONDS);
     setScore(0);
@@ -203,14 +216,24 @@ const QuickFire = () => {
         </AnimatePresence>
 
         {running ? (
-          <Question
-            question={question}
-            value={value}
-            onChange={setValue}
-            onSubmit={submit}
-            status={status}
-            disabled={!running}
-          />
+          state.inputMode === "choices" ? (
+            <ChoiceGrid
+              question={question}
+              onAnswer={evaluate}
+              status={status}
+              disabled={!running}
+              lastChoice={lastChoice}
+            />
+          ) : (
+            <Question
+              question={question}
+              value={value}
+              onChange={setValue}
+              onSubmit={submit}
+              status={status}
+              disabled={!running}
+            />
+          )
         ) : (
           <div className="text-center py-4" data-testid="quickfire-results">
             <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
