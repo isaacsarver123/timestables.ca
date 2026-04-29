@@ -65,3 +65,9 @@
 - iteration_1: 100% pass
 - iteration_2: 100% pass
 - iteration_3: 100% pass (all 14 features verified)
+
+### Iteration 4 (this turn)
+- **Step-by-Step Long Division solver** (`/play/long-div` → "Step-by-Step"). Visual long-division layout with quotient input slots; each correct digit reveals the product subtraction and remainder, just like solving on paper. 4 problems per round.
+- **Pick-the-answer mode** for Quick-Fire / Streak / Boss. New `Answer Style` toggle: Type answer / Pick answer. In choices mode, 4-button grid replaces typed input; wrong picks reveal the correct answer briefly.
+- **Compact OpPicker moved below Modes** — operation + answer-style chips on a single low-prominence card.
+- 100% pass on iteration_4 testing (14 scenarios).
