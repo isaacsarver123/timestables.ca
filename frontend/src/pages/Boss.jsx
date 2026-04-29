@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Skull, X, Heart, Plus, SkipForward } from "lucide-react";
 import Question from "@/components/Question";
 import ChoiceGrid from "@/components/ChoiceGrid";
+import ConfirmLeaveModal from "@/components/ConfirmLeaveModal";
+import { useNavGuard } from "@/lib/leaveGuard";
 import {
   getState,
   subscribe,
@@ -158,9 +160,11 @@ const Boss = () => {
 
   const pct = (progress / cfg.questions) * 100;
   const timePct = (time / cfg.timePerQ) * 100;
+  const guard = useNavGuard(phase === "play");
 
   return (
     <div className="max-w-3xl mx-auto" data-testid="boss-page">
+      <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
@@ -170,13 +174,13 @@ const Boss = () => {
             LV {level} · {name}
           </h1>
         </div>
-        <Link
-          to="/"
+        <button
+          onClick={() => guard.tryGo("/")}
           className="brut-border-soft surface px-3 py-1.5 font-semibold text-xs uppercase tracking-widest hover:surface-2 text-fg"
           data-testid="exit-game"
         >
           <X size={13} className="inline -mt-0.5" /> Exit
-        </Link>
+        </button>
       </div>
 
       {phase === "brief" && (
@@ -266,6 +270,7 @@ const Boss = () => {
                 onSubmit={submit}
                 status={status}
                 disabled={status !== "idle"}
+                correctAnswer={question?.answer}
               />
             )}
           </div>

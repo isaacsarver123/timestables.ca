@@ -154,13 +154,8 @@ const TableView = ({ tables }) => {
           {tables.map((n) => (
             <div key={n} className="py-3 first:pt-0 last:pb-0">
               <div className="font-mono font-black text-xl text-fg mb-2">×{n}</div>
-              <ul className="space-y-1.5">
-                {tableTips(n).map((t, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-fg">
-                    <span className="font-mono text-blue-600 font-bold mt-0.5">→</span>
-                    <span>{t}</span>
-                  </li>
-                ))}
+              <ul className="space-y-2">
+                {tableTips(n).map((t, i) => <TipItem key={i} tip={t} />)}
               </ul>
             </div>
           ))}
@@ -192,18 +187,38 @@ const SingleTable = ({ n, compact = false }) => (
   </div>
 );
 
+// ───────── Tips rendering ─────────
+const TIP_KIND = {
+  formula:  { label: "Formula",  cls: "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300",        dot: "bg-blue-600" },
+  rule:     { label: "Rule",     cls: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-600" },
+  pattern:  { label: "Pattern",  cls: "bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300", dot: "bg-purple-600" },
+  anchor:   { label: "Anchor",   cls: "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300",      dot: "bg-amber-500" },
+  trick:    { label: "Trick",    cls: "bg-rose-100 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300",          dot: "bg-rose-500" },
+};
+
+const TipItem = ({ tip }) => {
+  const k = TIP_KIND[tip.kind] || TIP_KIND.trick;
+  return (
+    <li className="flex items-start gap-3" data-testid={`tip-${tip.kind}`}>
+      <span className={`mt-1.5 inline-block w-1.5 h-1.5 rounded-full shrink-0 ${k.dot}`} />
+      <div className="min-w-0">
+        <span className={`inline-block ${k.cls} px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] rounded mr-2 align-middle`}>
+          {k.label}
+        </span>
+        <span className="text-sm text-fg leading-relaxed">{tip.text}</span>
+      </div>
+    </li>
+  );
+};
+
 const SingleTips = ({ n }) => (
   <div className="surface brut-border p-5" data-testid="learn-tips">
-    <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
-      Tips for ×{n}
+    <div className="flex items-baseline gap-2 mb-3">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">Tips for</div>
+      <div className="font-mono font-black text-2xl text-fg">×{n}</div>
     </div>
-    <ul className="mt-3 space-y-2.5">
-      {tableTips(n).map((t, i) => (
-        <li key={i} className="flex items-start gap-2 text-sm text-fg">
-          <span className="font-mono text-blue-600 font-bold mt-0.5">→</span>
-          <span>{t}</span>
-        </li>
-      ))}
+    <ul className="space-y-2.5">
+      {tableTips(n).map((t, i) => <TipItem key={i} tip={t} />)}
     </ul>
   </div>
 );

@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Clock, Flame, X, Plus, SkipForward, Snowflake, Sparkles } from "lucide-react";
 import Question from "@/components/Question";
 import ChoiceGrid from "@/components/ChoiceGrid";
+import ConfirmLeaveModal from "@/components/ConfirmLeaveModal";
+import { useNavGuard } from "@/lib/leaveGuard";
 import {
   getState,
   subscribe,
@@ -92,9 +94,10 @@ const QuickFire = () => {
       sfx.wrong();
       if (getState().inputMode === "choices") {
         setLastChoice(guess);
-        setTimeout(() => next(), 800);
+        setTimeout(() => next(), 900);
       } else {
-        setTimeout(() => setStatus("idle"), 450);
+        // Show correct answer briefly, then move on.
+        setTimeout(() => next(), 1100);
       }
     }
   };
@@ -139,9 +142,11 @@ const QuickFire = () => {
   };
 
   const pct = Math.max(0, Math.min(100, (time / ROUND_SECONDS) * 100));
+  const guard = useNavGuard(running);
 
   return (
     <div className="max-w-3xl mx-auto" data-testid="quickfire-page">
+      <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
@@ -149,13 +154,13 @@ const QuickFire = () => {
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg">Quick-Fire</h1>
         </div>
-        <Link
-          to="/"
+        <button
+          onClick={() => guard.tryGo("/")}
           className="brut-border-soft surface px-3 py-1.5 font-semibold text-xs uppercase tracking-widest hover:surface-2 text-fg"
           data-testid="exit-game"
         >
           <X size={13} className="inline -mt-0.5" /> Exit
-        </Link>
+        </button>
       </div>
 
       <div className="surface brut-border p-4 mb-4">
@@ -232,15 +237,24 @@ const QuickFire = () => {
               onSubmit={submit}
               status={status}
               disabled={!running}
+              correctAnswer={question?.answer}
             />
           )
         ) : (
           <div className="text-center py-4" data-testid="quickfire-results">
-            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
-              Time
+            <div className="flex items-baseline justify-center gap-2 leading-none">
+              <span className="text-3xl sm:text-4xl font-black tracking-tighter text-fg">Time</span>
+              <motion.span
+                initial={{ scale: 1.6, opacity: 0 }}
+                animate={{ scale: [1.6, 1.15, 1], opacity: 1 }}
+                transition={{ duration: 0.65, ease: [0.34, 1.56, 0.64, 1] }}
+                className="text-4xl sm:text-5xl font-black tracking-tighter text-fg"
+                data-testid="time-up-up"
+              >
+                UP.
+              </motion.span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-black tracking-tighter mt-1 text-fg">UP.</h2>
-            <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-md mx-auto">
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5 mt-6 max-w-md mx-auto">
               <div className="brut-border p-2.5 bg-blue-600 text-white">
                 <div className="text-[10px] uppercase tracking-widest opacity-90">Score</div>
                 <div className="font-mono font-bold text-2xl">{score}</div>

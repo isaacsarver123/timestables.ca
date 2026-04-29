@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Pencil,
+  Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -131,9 +132,13 @@ function Dashboard() {
         ) : (
           <div className="divide-y divide-fg/10">
             {stats.recent_payments.map((p, i) => (
-              <div key={i} className="flex items-center justify-between py-2 text-sm" data-testid={`payment-row-${i}`}>
-                <div className="font-mono text-xs text-fg truncate flex-1">{p.email}</div>
-                <div className="font-mono text-xs text-muted px-3">
+              <div
+                key={i}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                data-testid={`payment-row-${i}`}
+              >
+                <div className="font-mono text-xs text-fg truncate min-w-0 flex-1 basis-full sm:basis-0">{p.email}</div>
+                <div className="font-mono text-[10px] sm:text-xs text-muted">
                   {p.completed_at ? new Date(p.completed_at).toLocaleString() : "—"}
                 </div>
                 <div className="font-bold tabular-nums">
@@ -170,6 +175,7 @@ function UsersTab({ currentUserId }) {
   const [users, setUsers] = useState([]);
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const load = async (qs = "") => {
     try {
@@ -180,6 +186,18 @@ function UsersTab({ currentUserId }) {
     }
   };
   useEffect(() => { load(); }, []);
+
+  const doDelete = async () => {
+    if (!deleting) return;
+    try {
+      await api.delete(`/admin/users/${deleting.id}`);
+      toast.success("User deleted");
+      setDeleting(null);
+      load(q);
+    } catch (e) {
+      toast.error(formatErr(e.response?.data?.detail) || "Delete failed");
+    }
+  };
 
   return (
     <div className="space-y-4" data-testid="admin-users">
@@ -210,33 +228,51 @@ function UsersTab({ currentUserId }) {
           <div className="text-xs text-muted py-6 text-center">No users.</div>
         ) : (
           users.map((u) => (
-            <div key={u.id} className="flex items-center gap-3 px-3 py-2.5 text-sm" data-testid={`admin-user-${u.id}`}>
-              <div className="flex-1 min-w-0">
+            <div
+              key={u.id}
+              className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-2.5 text-sm"
+              data-testid={`admin-user-${u.id}`}
+            >
+              <div className="basis-full sm:basis-0 sm:flex-1 min-w-0 order-1">
                 <div className="font-bold text-fg truncate">{u.email}</div>
                 <div className="text-[11px] text-muted truncate">{u.name}</div>
               </div>
-              <Pill label={u.role} kind={u.role === "admin" ? "amber" : "neutral"} />
-              <Pill
-                label={
-                  u.subscription_status === "active" || u.subscription_status === "trialing"
-                    ? u.subscription_status
-                    : u.in_trial
-                    ? "trial"
-                    : "free / expired"
-                }
-                kind={
-                  u.subscription_status === "active" ? "emerald"
-                  : u.in_trial ? "blue"
-                  : "rose"
-                }
-              />
-              <button
-                onClick={() => setEditing(u)}
-                data-testid={`admin-user-edit-${u.id}`}
-                className="brut-border surface-2 text-fg px-2.5 py-1 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center gap-1"
-              >
-                <Pencil size={11} /> Edit
-              </button>
+              <div className="flex items-center gap-2 order-2">
+                <Pill label={u.role} kind={u.role === "admin" ? "amber" : "neutral"} />
+                <Pill
+                  label={
+                    u.subscription_status === "active" || u.subscription_status === "trialing"
+                      ? u.subscription_status
+                      : u.in_trial
+                      ? "trial"
+                      : "free / expired"
+                  }
+                  kind={
+                    u.subscription_status === "active" ? "emerald"
+                    : u.in_trial ? "blue"
+                    : "rose"
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-1.5 ml-auto order-3">
+                <button
+                  onClick={() => setEditing(u)}
+                  data-testid={`admin-user-edit-${u.id}`}
+                  className="brut-border surface-2 text-fg px-2.5 py-1 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center gap-1"
+                >
+                  <Pencil size={11} /> Edit
+                </button>
+                {u.id !== currentUserId && (
+                  <button
+                    onClick={() => setDeleting(u)}
+                    data-testid={`admin-user-delete-${u.id}`}
+                    className="brut-border surface-2 text-fg px-2 py-1 text-xs font-bold uppercase tracking-wider hover:bg-rose-500 hover:text-white"
+                    title="Delete user"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}
@@ -247,8 +283,49 @@ function UsersTab({ currentUserId }) {
           user={editing}
           currentUserId={currentUserId}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load(q); }}
-        />
+          onSaved={() => { setEditing(null); load(q); }}        />
+      )}
+
+      {deleting && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/55 backdrop-blur-sm p-4"
+          onClick={() => setDeleting(null)}
+          data-testid="user-delete-modal"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="surface brut-border brut-shadow w-full max-w-sm p-5 space-y-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 brut-border bg-rose-500 text-white grid place-items-center shrink-0">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-fg text-lg">Are you sure you want to delete?</h3>
+                <p className="text-sm text-muted mt-1">
+                  This will permanently remove <span className="font-bold text-fg break-all">{deleting.email}</span> and their entire save state. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              <button
+                onClick={doDelete}
+                data-testid="user-delete-confirm"
+                className="flex-1 bg-rose-500 text-white brut-border font-bold uppercase tracking-wider text-xs px-4 py-2.5 hover:bg-rose-600"
+              >
+                Yes, delete
+              </button>
+              <button
+                onClick={() => setDeleting(null)}
+                autoFocus
+                data-testid="user-delete-cancel"
+                className="flex-1 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 brut-border brut-shadow font-bold uppercase tracking-wider text-xs px-4 py-2.5 hover:bg-blue-600 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

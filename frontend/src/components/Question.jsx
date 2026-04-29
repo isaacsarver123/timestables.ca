@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const Question = forwardRef(function Question(
-  { question, value, onChange, onSubmit, status, autoFocus = true, disabled = false, hint },
+  { question, value, onChange, onSubmit, status, autoFocus = true, disabled = false, hint, correctAnswer },
   ref
 ) {
   const localRef = useRef(null);
@@ -76,6 +76,25 @@ export const Question = forwardRef(function Question(
           }`}
         />
       </motion.div>
+
+      <AnimatePresence>
+        {status === "wrong" && correctAnswer != null && (
+          <motion.div
+            key="reveal"
+            initial={{ opacity: 0, y: -4, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: [1, 1.18, 1] }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1], times: [0, 0.5, 1] }}
+            className="mt-3 mx-auto max-w-sm flex items-center justify-center gap-2 text-center"
+            data-testid="wrong-answer-reveal"
+          >
+            <span className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Answer was</span>
+            <span className="font-mono font-black text-3xl sm:text-4xl text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {correctAnswer}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <button
         onClick={onSubmit}

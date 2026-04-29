@@ -9,15 +9,12 @@ import {
   VolumeX,
   RotateCcw,
   AlertTriangle,
-  Upload,
   CreditCard,
   LogIn,
   LogOut,
   CheckCircle2,
   Clock3,
   ExternalLink,
-  Mail,
-  Phone,
   ShieldCheck,
   Infinity as InfinityIcon,
 } from "lucide-react";
@@ -33,6 +30,7 @@ import {
 import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
 import { api, formatErr } from "@/lib/api";
+import CardOnFile from "@/components/CardOnFile";
 
 const Settings = () => {
   const [state, setState] = useState(getState());
@@ -56,26 +54,6 @@ const Settings = () => {
       fn();
       toast.success(success);
     }
-  };
-
-  const importData = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        if (parsed && typeof parsed === "object") {
-          localStorage.setItem("tt_arena_state_v2", JSON.stringify(parsed));
-          window.location.reload();
-        } else {
-          toast.error("Invalid file");
-        }
-      } catch {
-        toast.error("Could not parse file");
-      }
-    };
-    reader.readAsText(file);
   };
 
   const startCheckout = async () => {
@@ -200,64 +178,8 @@ const Settings = () => {
         </Row>
       </section>
 
-      {/* Need help? */}
-      <section className="surface brut-border p-5 space-y-3" data-testid="settings-help">
-        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Need help?</h2>
-        <p className="text-xs text-muted">
-          Stuck on something or want to send feedback? Reach out — we usually reply within a day.
-        </p>
-        <div className="grid sm:grid-cols-2 gap-2.5">
-          <a
-            href={`mailto:${cms?.support_email || "isaacsarver@icloud.com"}`}
-            data-testid="settings-help-email"
-            className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3"
-          >
-            <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
-              <Mail size={16} />
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-sm">Email</div>
-              <div className="text-xs text-muted truncate">{cms?.support_email || "isaacsarver@icloud.com"}</div>
-            </div>
-          </a>
-          <a
-            href={`tel:${(cms?.support_phone || "8259623425").replace(/[^0-9+]/g, "")}`}
-            data-testid="settings-help-phone"
-            className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3"
-          >
-            <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
-              <Phone size={16} />
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-sm">Phone</div>
-              <div className="text-xs text-muted truncate">{cms?.support_phone || "825-962-3425"}</div>
-            </div>
-          </a>
-        </div>
-      </section>
-
-      {/* Data — Import only (export removed) */}
-      <section className="surface brut-border p-5 space-y-3" data-testid="settings-data">
-        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Data</h2>
-        <label
-          className="brut-border surface-2 text-fg p-3 text-left hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-start gap-3 cursor-pointer"
-          data-testid="settings-import"
-        >
-          <div className="w-9 h-9 brut-border surface grid place-items-center text-fg">
-            <Upload size={16} />
-          </div>
-          <div>
-            <div className="font-bold text-sm">Import save file</div>
-            <div className="text-xs text-muted">Replace state from a JSON file</div>
-          </div>
-          <input
-            type="file"
-            accept="application/json"
-            className="hidden"
-            onChange={importData}
-          />
-        </label>
-      </section>
+      {/* Need help? section moved to the bottom of the page. */}
+      {/* Data — Import removed per request; nothing else here for now. */}
 
       {/* Reset */}
       <section className="surface brut-border p-5 space-y-3" data-testid="settings-reset">
@@ -302,6 +224,30 @@ const Settings = () => {
           }
         />
       </section>
+
+      {/* Need help? — moved to the bottom, plain text per request */}
+      <section className="border-t-2 border-fg/15 pt-6 pb-2" data-testid="settings-help">
+        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-2">Need help?</h2>
+        <p className="text-sm text-muted leading-relaxed">
+          Stuck or have feedback? Contact us via email at{" "}
+          <a
+            href={`mailto:${cms?.support_email || "isaacsarver@icloud.com"}`}
+            data-testid="settings-help-email"
+            className="font-bold text-fg underline decoration-2 underline-offset-2 hover:text-blue-600 break-all"
+          >
+            {cms?.support_email || "isaacsarver@icloud.com"}
+          </a>
+          {" "}or by phone at{" "}
+          <a
+            href={`tel:${(cms?.support_phone || "8259623425").replace(/[^0-9+]/g, "")}`}
+            data-testid="settings-help-phone"
+            className="font-bold text-fg underline decoration-2 underline-offset-2 hover:text-blue-600"
+          >
+            {cms?.support_phone || "825-962-3425"}
+          </a>
+          .
+        </p>
+      </section>
     </div>
   );
 };
@@ -344,15 +290,15 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
             Subscribed · ${sub.amount_cad?.toFixed(2)} CAD / {sub.interval}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
-          <Tile
-            label="Card on file"
-            value={sub.last4 ? `•••• ${sub.last4}` : "—"}
-            sub={sub.brand ? sub.brand.toUpperCase() : ""}
-            testid="billing-card"
-          />
-        </div>
+        <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
+        <CardOnFile brand={sub.brand} last4={sub.last4} testid="billing-card" />
+        <p className="text-[11px] text-muted leading-relaxed" data-testid="billing-charge-line">
+          ${sub.amount_cad?.toFixed(2)} CAD will be charged to your{" "}
+          <span className="font-bold text-fg">
+            {sub.brand ? sub.brand : "card"}
+          </span>{" "}
+          ending in <span className="font-mono font-bold text-fg">{sub.last4 || "—"}</span> each {sub.interval}.
+        </p>
         {sub.cancel_at_period_end && (
           <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 brut-border-soft p-2.5">
             Subscription will cancel at the end of the current period.

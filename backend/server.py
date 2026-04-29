@@ -224,7 +224,8 @@ class CMSKVIn(BaseModel):
 
 
 def _gen_friend_code() -> str:
-    import secrets, string
+    import secrets
+    import string
     alphabet = string.ascii_uppercase + string.digits
     return "TT-" + "".join(secrets.choice(alphabet) for _ in range(5))
 
@@ -704,6 +705,23 @@ async def admin_users_edit(user_id: str, body: UserEditIn, admin: dict = Depends
     await db.users.update_one({"_id": oid}, {"$set": upd})
     refreshed = await db.users.find_one({"_id": oid})
     return serialize_user(refreshed)
+
+
+@api.delete("/admin/users/{user_id}")
+async def admin_users_delete(user_id: str, admin: dict = Depends(get_admin_user)):
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    if str(oid) == str(admin["_id"]):
+        raise HTTPException(status_code=400, detail="Can't delete yourself.")
+    target = await db.users.find_one({"_id": oid})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    await db.users.delete_one({"_id": oid})
+    await db.user_state.delete_many({"user_id": str(oid)})
+    await db.payment_transactions.delete_many({"user_id": str(oid)})
+    return {"deleted": True, "id": str(oid)}
 
 
 @api.get("/admin/cms")

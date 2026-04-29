@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, CalendarCheck, X, Flame } from "lucide-react";
 import Question from "@/components/Question";
+import ConfirmLeaveModal from "@/components/ConfirmLeaveModal";
+import { useNavGuard } from "@/lib/leaveGuard";
 import {
   getState,
   subscribe,
@@ -73,9 +75,11 @@ const Daily = () => {
   };
 
   const pct = ((idx + (running ? 0 : 1)) / TOTAL) * 100;
+  const guard = useNavGuard(running);
 
   return (
     <div className="max-w-3xl mx-auto" data-testid="daily-page">
+      <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <Link
@@ -102,13 +106,13 @@ const Daily = () => {
             </div>
           )}
         </div>
-        <Link
-          to="/"
+        <button
+          onClick={() => guard.tryGo("/")}
           className="brut-border-soft surface px-3 py-1.5 font-semibold text-xs uppercase tracking-widest hover:surface-2 text-fg"
           data-testid="exit-game"
         >
           <X size={13} className="inline -mt-0.5" /> Exit
-        </Link>
+        </button>
       </div>
 
       {completedToday ? (
@@ -164,6 +168,7 @@ const Daily = () => {
               onSubmit={submit}
               status={status}
               disabled={status !== "idle"}
+              correctAnswer={q?.answer}
             />
           </div>
         </>

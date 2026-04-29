@@ -398,106 +398,112 @@ export function generateStepMultiplication(opts = {}) {
 }
 
 // Tips per table for Learn mode
+/**
+ * Structured tips per times-table.
+ *   { kind: "formula" | "rule" | "anchor" | "pattern" | "trick", text: "..." }
+ *
+ * Designed so the UI can render an icon + small caption per category.
+ */
 export function tableTips(n) {
   const tips = {
     1: [
-      "Identity: anything × 1 = itself.",
-      "Useful for sanity-checking — if a result equals the multiplier, you used 1.",
+      { kind: "formula", text: "Identity: anything × 1 = itself." },
+      { kind: "trick", text: "If a result equals the multiplier, you used 1." },
     ],
     2: [
-      "Doubles: 2×n = n + n.",
-      "Always even.",
-      "Divisibility: a number is divisible by 2 if its last digit is 0, 2, 4, 6, or 8.",
+      { kind: "formula", text: "Doubles: 2×n = n + n." },
+      { kind: "pattern", text: "Always even — last digit is 0, 2, 4, 6, or 8." },
+      { kind: "rule", text: "Divisible by 2 if the last digit is even." },
     ],
     3: [
-      "3×n = 2×n + n. e.g. 3×7 = 14 + 7 = 21.",
-      "Divisibility rule: add up the digits — if the sum is a multiple of 3, the number is too. 123 → 1+2+3 = 6 ✓.",
-      "The pattern of last digits cycles: 3, 6, 9, 2, 5, 8, 1, 4, 7, 0.",
+      { kind: "formula", text: "3×n = 2×n + n. (3×7 = 14 + 7 = 21)" },
+      { kind: "rule", text: "Add the digits — if the sum is a multiple of 3, the number is too. 123 → 1+2+3 = 6 ✓" },
+      { kind: "pattern", text: "Last-digit cycle: 3, 6, 9, 2, 5, 8, 1, 4, 7, 0." },
     ],
     4: [
-      "Double, then double again: 4×n = 2×(2×n). e.g. 4×7 → 7→14→28.",
-      "Divisibility rule: a number is divisible by 4 if its last two digits form a multiple of 4. 312 → 12 ✓.",
-      "Pattern of last digits: 4, 8, 2, 6, 0 — repeats every 5.",
+      { kind: "trick", text: "Double, then double again. 4×7 → 7 → 14 → 28." },
+      { kind: "rule", text: "Divisible by 4 if the last two digits form a multiple of 4. 312 → '12' ✓" },
+      { kind: "pattern", text: "Last-digit cycle of length 5: 4, 8, 2, 6, 0." },
     ],
     5: [
-      "Always ends in 0 (even k) or 5 (odd k).",
-      "5×n = (10×n) ÷ 2 — multiply by ten, then halve.",
-      "Divisibility: ends in 0 or 5.",
+      { kind: "pattern", text: "Always ends in 0 (even k) or 5 (odd k)." },
+      { kind: "trick", text: "5×n = (10×n) ÷ 2 — multiply by ten, then halve." },
+      { kind: "rule", text: "Divisible by 5 if it ends in 0 or 5." },
     ],
     6: [
-      "6×n = 5×n + n. e.g. 6×7 = 35 + 7 = 42.",
-      "Always even, since 6 is even.",
-      "Divisibility rule: divisible by 6 ⇔ divisible by both 2 and 3.",
+      { kind: "formula", text: "6×n = 5×n + n. (6×7 = 35 + 7 = 42)" },
+      { kind: "pattern", text: "Always even, since 6 is even." },
+      { kind: "rule", text: "Divisible by 6 ⇔ divisible by both 2 and 3." },
     ],
     7: [
-      "No clean shortcut — sequencing helps: 7, 14, 21, 28, 35, 42, 49, 56, 63, 70.",
-      "Anchors: 7×7 = 49, 7×8 = 56 ('5, 6, 7, 8' → 56 = 7×8), 7×11 = 77.",
-      "7×9 = 63: 'six-three is seven-nine'.",
+      { kind: "trick", text: "No clean shortcut — chain it: 7, 14, 21, 28, 35, 42, 49, 56, 63, 70." },
+      { kind: "anchor", text: "7×7 = 49 · 7×8 = 56 (\"5, 6, 7, 8\" → 56 = 7×8) · 7×11 = 77." },
+      { kind: "trick", text: "7×9 = 63 — \"six-three is seven-nine\"." },
     ],
     8: [
-      "Triple-double: 8×n = 2 × 2 × 2 × n. e.g. 8×7 → 7→14→28→56.",
-      "Or: 8×n = 10×n − 2×n. e.g. 8×6 = 60 − 12 = 48.",
-      "Divisibility rule: divisible by 8 ⇔ the last three digits form a multiple of 8.",
+      { kind: "trick", text: "Triple-double: 8×n = 2 × 2 × 2 × n. (8×7 → 7 → 14 → 28 → 56)" },
+      { kind: "formula", text: "Or 8×n = 10×n − 2×n. (8×6 = 60 − 12 = 48)" },
+      { kind: "rule", text: "Divisible by 8 if the last three digits form a multiple of 8." },
     ],
     9: [
-      "9×n = 10×n − n. e.g. 9×7 = 70 − 7 = 63.",
-      "Digit-sum trick: for 9×k where 1 ≤ k ≤ 10, the digits of the answer add to 9. (9×4 = 36 → 3+6 = 9).",
-      "Divisibility rule: the digit sum is a multiple of 9. e.g. 729 → 7+2+9 = 18 ✓.",
-      "Finger trick: hold up 10 fingers, fold the kth finger; the digits on each side give the answer.",
+      { kind: "formula", text: "9×n = 10×n − n. (9×7 = 70 − 7 = 63)" },
+      { kind: "trick", text: "Digits of the answer add to 9 (for 1 ≤ n ≤ 10). 9×4 = 36 → 3+6 = 9." },
+      { kind: "rule", text: "Divisible by 9 if the digit sum is a multiple of 9. 729 → 18 ✓" },
+      { kind: "trick", text: "Finger trick: hold up 10 fingers, fold the n-th; digits on each side give the answer." },
     ],
     10: [
-      "Just append a 0 to n.",
-      "Divisibility: ends in 0.",
+      { kind: "trick", text: "Just append a 0 to n." },
+      { kind: "rule", text: "Divisible by 10 if it ends in 0." },
     ],
     11: [
-      "For 1-digit n: write n twice. 11×4 = 44, 11×7 = 77.",
-      "For 2-digit n: split the digits, add, insert. 11×23: 2_3 with 2+3 = 5 → 253. Carry if the sum ≥ 10.",
-      "Divisibility rule: take the alternating sum of digits. If it's a multiple of 11 (including 0), the number is divisible by 11. 2728 → 2−7+2−8 = −11 ✓.",
+      { kind: "trick", text: "For 1-digit n: write n twice. 11×4 = 44, 11×7 = 77." },
+      { kind: "trick", text: "For 2-digit n: split, add, insert. 11×23 → 2_3 with 2+3 = 5 → 253. Carry if the sum ≥ 10." },
+      { kind: "rule", text: "Alternating digit sum is a multiple of 11 (incl. 0). 2728 → 2−7+2−8 = −11 ✓" },
     ],
     12: [
-      "12×n = 10×n + 2×n. e.g. 12×7 = 70 + 14 = 84.",
-      "12 = 4 × 3, so 12×n = 4×n × 3 (or 6×n × 2).",
-      "Anchor: 12×12 = 144.",
+      { kind: "formula", text: "12×n = 10×n + 2×n. (12×7 = 70 + 14 = 84)" },
+      { kind: "trick", text: "12 = 4 × 3, so 12×n = 4×n × 3 (or 6×n × 2)." },
+      { kind: "anchor", text: "12×12 = 144." },
     ],
     13: [
-      "13×n = 10×n + 3×n. e.g. 13×6 = 60 + 18 = 78.",
-      "Anchor: 13×13 = 169.",
+      { kind: "formula", text: "13×n = 10×n + 3×n. (13×6 = 60 + 18 = 78)" },
+      { kind: "anchor", text: "13×13 = 169." },
     ],
     14: [
-      "14×n = 10×n + 4×n.",
-      "Or: 14×n = 7×n × 2 — if your 7s are solid, just double.",
-      "Even, so divisibility by 2 always holds; divisibility by 7 needed for the rest.",
+      { kind: "formula", text: "14×n = 10×n + 4×n." },
+      { kind: "trick", text: "14×n = 7×n × 2 — if your 7s are solid, just double." },
+      { kind: "pattern", text: "Always even (14 is even)." },
     ],
     15: [
-      "15×n = 10×n + 5×n. e.g. 15×6 = 60 + 30 = 90.",
-      "Halving trick: 15×n = (30×n) ÷ 2 — useful for even n. 15×8 = 240 ÷ 2 = 120.",
-      "15 = 3 × 5: a number is divisible by 15 ⇔ divisible by both 3 and 5.",
+      { kind: "formula", text: "15×n = 10×n + 5×n. (15×6 = 60 + 30 = 90)" },
+      { kind: "trick", text: "Halve a 30: 15×n = (30×n) ÷ 2. (15×8 = 240 ÷ 2 = 120)" },
+      { kind: "rule", text: "15 = 3 × 5: divisible by 15 ⇔ divisible by 3 and 5." },
     ],
     16: [
-      "16×n = 8×n × 2 — double your 8s.",
-      "Or: 16×n = 4×n × 4.",
-      "Or: 16×n = 10×n + 6×n.",
+      { kind: "trick", text: "16×n = 8×n × 2 — double your 8s." },
+      { kind: "formula", text: "Or 16×n = 4×n × 4." },
+      { kind: "formula", text: "Or 16×n = 10×n + 6×n." },
     ],
     17: [
-      "17×n = 10×n + 7×n.",
-      "Anchors: 17×3 = 51, 17×6 = 102, 17×17 = 289.",
-      "Genuinely no shortcut — repetition wins. Drill the anchors.",
+      { kind: "formula", text: "17×n = 10×n + 7×n." },
+      { kind: "anchor", text: "17×3 = 51 · 17×6 = 102 · 17×17 = 289." },
+      { kind: "trick", text: "Genuinely no shortcut — drill the anchors and repetition wins." },
     ],
     18: [
-      "18×n = 9×n × 2 — double your 9s.",
-      "Or: 18×n = 20×n − 2×n. e.g. 18×7 = 140 − 14 = 126.",
-      "Divisibility rule: divisible by 18 ⇔ divisible by 2 and by 9.",
+      { kind: "trick", text: "18×n = 9×n × 2 — double your 9s." },
+      { kind: "formula", text: "Or 18×n = 20×n − 2×n. (18×7 = 140 − 14 = 126)" },
+      { kind: "rule", text: "Divisible by 18 ⇔ divisible by 2 and by 9." },
     ],
     19: [
-      "19×n = 20×n − n. e.g. 19×8 = 160 − 8 = 152.",
-      "Or: (10×n × 2) − n.",
-      "Anchor: 19×19 = 361.",
+      { kind: "formula", text: "19×n = 20×n − n. (19×8 = 160 − 8 = 152)" },
+      { kind: "formula", text: "Or (10×n × 2) − n." },
+      { kind: "anchor", text: "19×19 = 361." },
     ],
     20: [
-      "20×n = 2×n with a 0 appended. e.g. 20×7 = 14 → 140.",
-      "Or: 10×n × 2.",
-      "Divisibility: ends in 00, 20, 40, 60, or 80 (i.e. divisible by both 4 and 5).",
+      { kind: "trick", text: "20×n = 2×n with a 0 appended. (20×7 = 14 → 140)" },
+      { kind: "formula", text: "Or 10×n × 2." },
+      { kind: "rule", text: "Ends in 00, 20, 40, 60, or 80." },
     ],
   };
-  return tips[n] || ["Practise repeats until automatic."];
+  return tips[n] || [{ kind: "trick", text: "Practise repeats until automatic." }];
 }

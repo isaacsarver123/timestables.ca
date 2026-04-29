@@ -425,6 +425,93 @@ class TestAdminUserEdit:
         assert r.status_code == 400
 
 
+# ------------------------------------------------------------------ NEW: DELETE /api/admin/users/{id}
+class TestAdminUserDelete:
+    def _create_user(self, email=None):
+        email = email or f"TEST_del_{uuid.uuid4().hex[:8]}@timestables.ca"
+        r = requests.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": email, "password": "testpass123", "name": "ToDelete"},
+            headers={"Content-Type": "application/json", "X-Forwarded-For": _spoofed_ip()},
+        )
+        assert r.status_code == 200, r.text
+        return email, r.json()["id"]
+
+    def _admin_session(self):
+        s = requests.Session()
+        s.headers.update({"Content-Type": "application/json"})
+        r = s.post(f"{BASE_URL}/api/auth/login",
+                   json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        assert r.status_code == 200
+        return s
+
+    def test_admin_delete_user_removes_and_stats_decrement(self):
+        # Create sacrificial user
+        email, uid = self._create_user()
+        admin = self._admin_session()
+
+        # Stats before
+        s_before = admin.get(f"{BASE_URL}/api/admin/stats").json()
+        total_before = s_before["total_users"]
+
+        # Confirm user is searchable
+        rs = admin.get(f"{BASE_URL}/api/admin/users?q={email.split('@')[0]}")
+        assert rs.status_code == 200
+        emails_before = [u["email"] for u in rs.json()["users"]]
+        assert email.lower() in emails_before
+
+        # DELETE
+        rd = admin.delete(f"{BASE_URL}/api/admin/users/{uid}")
+        assert rd.status_code == 200, rd.text
+        body = rd.json()
+        assert body["deleted"] is True
+        assert body["id"] == uid
+
+        # GET — user no longer in search
+        rs2 = admin.get(f"{BASE_URL}/api/admin/users?q={email.split('@')[0]}")
+        assert rs2.status_code == 200
+        emails_after = [u["email"] for u in rs2.json()["users"]]
+        assert email.lower() not in emails_after
+
+        # Stats decremented
+        s_after = admin.get(f"{BASE_URL}/api/admin/stats").json()
+        assert s_after["total_users"] == total_before - 1, (
+            f"total_users not decremented: before={total_before} after={s_after['total_users']}")
+
+    def test_admin_delete_self_returns_400(self):
+        admin = self._admin_session()
+        me = admin.get(f"{BASE_URL}/api/auth/me").json()
+        admin_id = me["id"]
+        r = admin.delete(f"{BASE_URL}/api/admin/users/{admin_id}")
+        assert r.status_code == 400, r.text
+        assert "yourself" in r.json().get("detail", "").lower()
+
+    def test_admin_delete_nonexistent_returns_404(self):
+        admin = self._admin_session()
+        # valid ObjectId-shape but does not exist
+        r = admin.delete(f"{BASE_URL}/api/admin/users/507f1f77bcf86cd799439011")
+        assert r.status_code == 404, r.text
+
+    def test_admin_delete_invalid_objectid_returns_400(self):
+        admin = self._admin_session()
+        r = admin.delete(f"{BASE_URL}/api/admin/users/not-a-real-id")
+        assert r.status_code == 400, r.text
+
+    def test_admin_delete_as_non_admin_403(self, api_client, unique_email):
+        # Register regular user
+        r = api_client.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": unique_email, "password": "testpass123"},
+            headers={"X-Forwarded-For": _spoofed_ip()},
+        )
+        assert r.status_code == 200
+        my_id = r.json()["id"]
+
+        # Try to delete self with a regular-user session — should be 403 (admin-only)
+        r2 = api_client.delete(f"{BASE_URL}/api/admin/users/{my_id}")
+        assert r2.status_code == 403, r2.text
+
+
 # ------------------------------------------------------------------ USER STATE SYNC
 class TestUserStateSync:
     def test_state_get_put_get(self, api_client, unique_email):
