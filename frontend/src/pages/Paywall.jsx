@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Lock, Heart, ArrowRight, Settings as SettingsIcon, LogOut } from "lucide-react";
@@ -9,6 +9,10 @@ export default function Paywall() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
+  const [blurb, setBlurb] = useState("");
+  useEffect(() => {
+    api.get("/cms/public").then((r) => setBlurb(r.data?.paywall_blurb || "")).catch(() => {});
+  }, []);
 
   const startCheckout = async () => {
     setBusy(true);
@@ -38,10 +42,14 @@ export default function Paywall() {
           </div>
         </div>
 
-        <p className="text-sm text-muted leading-relaxed">
-          Our service is just <span className="font-bold text-fg">$5 CAD/month</span> — that goes
-          straight to keeping the servers humming and helping the devs keep building. Your account
-          is tied to your email, so making a new one won't grant another free trial.
+        <p className="text-sm text-muted leading-relaxed" data-testid="paywall-blurb">
+          {blurb || (
+            <>
+              Our service is just <span className="font-bold text-fg">$5 CAD/month</span> — that goes
+              straight to keeping the servers humming and helping the devs keep building. Your account
+              is tied to your email and IP, so making a new one won't grant another free trial.
+            </>
+          )}
         </p>
 
         <div className="surface-2 brut-border-soft p-4 flex items-baseline gap-3">

@@ -18,6 +18,7 @@ import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Paywall from "@/pages/Paywall";
+import Admin from "@/pages/Admin";
 import { BillingSuccess, BillingCancel } from "@/pages/BillingResult";
 import { AuthProvider } from "@/lib/auth";
 import { initRemoteSync, getState, subscribe } from "@/lib/storage";
@@ -62,6 +63,12 @@ function App() {
             <Route
               path="/settings"
               element={<Layout><PaywallGuard allowExpired><Settings /></PaywallGuard></Layout>}
+            />
+
+            {/* Admin (auth required, no paywall) */}
+            <Route
+              path="/admin"
+              element={<Layout><PaywallGuard allowExpired><Admin /></PaywallGuard></Layout>}
             />
 
             {/* Paywall page (accessible directly too) */}

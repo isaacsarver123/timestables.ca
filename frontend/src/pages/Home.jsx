@@ -44,20 +44,31 @@ const modes = [
 
 const Home = () => {
   const [state, setState] = useState(getState());
+  const [cms, setCms] = useState(null);
   useEffect(() => subscribe(() => setState(getState())), []);
+  useEffect(() => {
+    import("@/lib/api").then(({ api }) => {
+      api.get("/cms/public").then((r) => setCms(r.data)).catch(() => {});
+    });
+  }, []);
 
   return (
     <div className="space-y-8">
+      {cms?.announcement_active && cms.announcement && (
+        <div className="brut-border bg-amber-200 text-zinc-950 px-4 py-2.5 text-sm font-bold" data-testid="announcement-banner">
+          {cms.announcement}
+        </div>
+      )}
       {/* Quiet header */}
       <section>
         <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
           Times Tables
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg mt-1">
-          Practice multiplication and division.
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-fg mt-1" data-testid="hero-title">
+          {cms?.hero_title || "Practice multiplication and division."}
         </h1>
-        <p className="text-muted text-sm mt-2 max-w-xl">
-          Pick the tables you want, choose a mode, and go. Progress saves to this device.
+        <p className="text-muted text-sm mt-2 max-w-xl" data-testid="hero-subtitle">
+          {cms?.hero_subtitle || "Pick the tables you want, choose a mode, and go. Progress saves across your devices."}
         </p>
       </section>
 

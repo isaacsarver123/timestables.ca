@@ -1,44 +1,45 @@
 """
-Times-tables.ca backend.
+timestables.ca backend
 - JWT email/password auth (bcrypt + httpOnly cookies)
-- 2-day server-managed trial → Stripe Checkout subscription ($5 CAD/mo)
-- Cross-device user-state sync (localStorage shape stored in MongoDB)
+- 2-day server-managed trial → Stripe subscription ($5 CAD/month, mode=subscription)
+- IP-based anti-trial-abuse (one trial per IP unless ALLOW_MULTI_SIGNUP_PER_IP=1)
+- Admin role (Isaac) — full access without paying, /admin dashboard + CMS
+- Cross-device user-state sync
 """
 from dotenv import load_dotenv
-load_dotenv()  # MUST be first
+load_dotenv()
 
 import os
 import logging
-import secrets
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from typing import Optional, Any
+from typing import Optional
 
 import bcrypt
 import jwt
+import stripe
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, Request, Response, HTTPException, Depends
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-from emergentintegrations.payments.stripe.checkout import (
-    StripeCheckout,
-    CheckoutSessionRequest,
-)
-
-# ------------------------------------------------------------------ ENV / DB
+# ------------------------------------------------------------------ ENV
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALG = "HS256"
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@timestables.ca").lower()
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "isaac@timestables.ca").lower()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin12345")
-STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
+ADMIN_NAME = os.environ.get("ADMIN_NAME", "Isaac")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 PRICE_CAD = float(os.environ.get("SUBSCRIPTION_PRICE_CAD", "5.00"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "2"))
-PERIOD_DAYS = 30  # length of one paid period (manual-renew subscription model)
+ALLOW_MULTI_SIGNUP_PER_IP = os.environ.get("ALLOW_MULTI_SIGNUP_PER_IP", "0") == "1"
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -58,18 +59,18 @@ def verify_password(pw: str, hashed: str) -> bool:
         return False
 
 def create_access_token(user_id: str, email: str) -> str:
-    payload = {
-        "sub": user_id, "email": email, "type": "access",
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=60),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    return jwt.encode(
+        {"sub": user_id, "email": email, "type": "access",
+         "exp": datetime.now(timezone.utc) + timedelta(minutes=60)},
+        JWT_SECRET, algorithm=JWT_ALG,
+    )
 
 def create_refresh_token(user_id: str) -> str:
-    payload = {
-        "sub": user_id, "type": "refresh",
-        "exp": datetime.now(timezone.utc) + timedelta(days=14),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    return jwt.encode(
+        {"sub": user_id, "type": "refresh",
+         "exp": datetime.now(timezone.utc) + timedelta(days=14)},
+        JWT_SECRET, algorithm=JWT_ALG,
+    )
 
 def set_auth_cookies(response: Response, access: str, refresh: str):
     response.set_cookie("access_token", access, httponly=True, secure=True,
@@ -82,9 +83,16 @@ def clear_auth_cookies(response: Response):
     response.delete_cookie("refresh_token", path="/")
 
 
+def client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def serialize_user(doc: dict) -> dict:
-    """Strip _id / password and compute trial/access state."""
     now = datetime.now(timezone.utc)
+    role = doc.get("role", "user")
     trial_start = doc.get("trial_start")
     if isinstance(trial_start, str):
         trial_start = datetime.fromisoformat(trial_start)
@@ -92,24 +100,23 @@ def serialize_user(doc: dict) -> dict:
         trial_start = trial_start.replace(tzinfo=timezone.utc)
     trial_end = trial_start + timedelta(days=TRIAL_DAYS) if trial_start else None
     sub = doc.get("subscription") or {}
-    sub_status = sub.get("status")  # active | trialing | past_due | canceled | incomplete | unpaid
-    sub_active = sub_status in ("active", "trialing", "past_due")  # past_due still has access
-
+    sub_status = sub.get("status")
+    sub_active = sub_status in ("active", "trialing", "past_due")
     in_trial = bool(trial_end and now < trial_end)
-    has_access = in_trial or sub_active
-
-    seconds_left_trial = int((trial_end - now).total_seconds()) if trial_end and now < trial_end else 0
-
+    # Admins always have access — they don't need to pay.
+    has_access = role == "admin" or in_trial or sub_active
+    secs_left = int((trial_end - now).total_seconds()) if trial_end and now < trial_end else 0
     return {
         "id": str(doc["_id"]),
         "email": doc["email"],
         "name": doc.get("name") or doc["email"].split("@")[0],
-        "role": doc.get("role", "user"),
+        "role": role,
         "trial_start": trial_start.isoformat() if trial_start else None,
         "trial_end": trial_end.isoformat() if trial_end else None,
-        "trial_seconds_left": seconds_left_trial,
+        "trial_seconds_left": secs_left,
         "in_trial": in_trial,
         "has_access": has_access,
+        "is_admin": role == "admin",
         "subscription_status": sub_status,
         "billing": {
             "current_period_end": sub.get("current_period_end"),
@@ -144,6 +151,20 @@ async def get_token_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def get_admin_user(user: dict = Depends(get_token_user)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return user
+
+
+def require_stripe():
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe not configured. Add STRIPE_SECRET_KEY to backend/.env."
+        )
+
+
 # ------------------------------------------------------------------ MODELS
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -157,6 +178,13 @@ class LoginIn(BaseModel):
 class StateIn(BaseModel):
     state: dict
 
+class CMSIn(BaseModel):
+    hero_title: Optional[str] = None
+    hero_subtitle: Optional[str] = None
+    paywall_blurb: Optional[str] = None
+    announcement: Optional[str] = None
+    announcement_active: Optional[bool] = None
+
 
 # ------------------------------------------------------------------ APP
 app = FastAPI(title="timestables.ca")
@@ -166,29 +194,42 @@ api = APIRouter(prefix="/api")
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
+    await db.users.create_index("signup_ip")
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.user_state.create_index("user_id", unique=True)
     await db.login_attempts.create_index("identifier")
     # Seed admin
     existing = await db.users.find_one({"email": ADMIN_EMAIL})
+    now = datetime.now(timezone.utc)
     if not existing:
         await db.users.insert_one({
             "email": ADMIN_EMAIL,
             "password_hash": hash_password(ADMIN_PASSWORD),
-            "name": "Admin",
+            "name": ADMIN_NAME,
             "role": "admin",
-            "created_at": datetime.now(timezone.utc),
-            "trial_start": datetime.now(timezone.utc),
-            "subscription": {"status": "active"},  # admin always has access
+            "created_at": now,
+            "trial_start": now,
+            "subscription": {"status": "active"},
+            "signup_ip": "admin",
         })
-        log.info("Seeded admin user %s", ADMIN_EMAIL)
+        log.info("Seeded admin user %s (%s)", ADMIN_EMAIL, ADMIN_NAME)
     else:
+        upd = {"name": ADMIN_NAME, "role": "admin"}
         if not verify_password(ADMIN_PASSWORD, existing["password_hash"]):
-            await db.users.update_one(
-                {"email": ADMIN_EMAIL},
-                {"$set": {"password_hash": hash_password(ADMIN_PASSWORD)}},
-            )
-            log.info("Updated admin password for %s", ADMIN_EMAIL)
+            upd["password_hash"] = hash_password(ADMIN_PASSWORD)
+        await db.users.update_one({"email": ADMIN_EMAIL}, {"$set": upd})
+    # Default CMS doc
+    cms = await db.cms.find_one({"_id": "site"})
+    if not cms:
+        await db.cms.insert_one({
+            "_id": "site",
+            "hero_title": "Master your times tables.",
+            "hero_subtitle": "Gamified practice for teens and adults — no kid stuff.",
+            "paywall_blurb": "Our service is just $5 CAD/month — that's what keeps the servers humming and the devs building.",
+            "announcement": "",
+            "announcement_active": False,
+            "updated_at": now.isoformat(),
+        })
 
 
 @app.on_event("shutdown")
@@ -196,21 +237,43 @@ async def on_shutdown():
     client.close()
 
 
-# -------------------------------------------------------- HEALTH
+# -------------------------------------------------------- HEALTH / CMS
 @api.get("/")
 async def root():
-    return {"app": "timestables.ca", "status": "ok"}
+    return {"app": "timestables.ca", "status": "ok",
+            "stripe_configured": bool(STRIPE_SECRET_KEY)}
+
+
+@api.get("/cms/public")
+async def cms_public():
+    doc = await db.cms.find_one({"_id": "site"}) or {}
+    return {
+        "hero_title": doc.get("hero_title", ""),
+        "hero_subtitle": doc.get("hero_subtitle", ""),
+        "paywall_blurb": doc.get("paywall_blurb", ""),
+        "announcement": doc.get("announcement", ""),
+        "announcement_active": doc.get("announcement_active", False),
+    }
 
 
 # -------------------------------------------------------- AUTH
 @api.post("/auth/register")
-async def register(payload: RegisterIn, response: Response):
+async def register(payload: RegisterIn, request: Request, response: Response):
     email = payload.email.lower().strip()
-    existing = await db.users.find_one({"email": email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Email already registered. Sign in instead.")
+
+    ip = client_ip(request)
+    if not ALLOW_MULTI_SIGNUP_PER_IP:
+        prior = await db.users.find_one({"signup_ip": ip, "role": {"$ne": "admin"}})
+        if prior:
+            raise HTTPException(
+                status_code=400,
+                detail="A trial account already exists from this network. Sign in to your existing account."
+            )
+
     now = datetime.now(timezone.utc)
-    doc = {
+    res = await db.users.insert_one({
         "email": email,
         "password_hash": hash_password(payload.password),
         "name": (payload.name or email.split("@")[0]).strip(),
@@ -218,41 +281,40 @@ async def register(payload: RegisterIn, response: Response):
         "created_at": now,
         "trial_start": now,
         "subscription": {"status": None},
-    }
-    res = await db.users.insert_one(doc)
+        "signup_ip": ip,
+    })
     user = await db.users.find_one({"_id": res.inserted_id})
-    access = create_access_token(str(user["_id"]), user["email"])
-    refresh = create_refresh_token(str(user["_id"]))
-    set_auth_cookies(response, access, refresh)
+    set_auth_cookies(
+        response,
+        create_access_token(str(user["_id"]), user["email"]),
+        create_refresh_token(str(user["_id"])),
+    )
     return serialize_user(user)
 
 
 @api.post("/auth/login")
 async def login(payload: LoginIn, request: Request, response: Response):
     email = payload.email.lower().strip()
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     ident = f"{ip}:{email}"
-
-    # brute force: 5 attempts / 15 min
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
     fails = await db.login_attempts.count_documents(
         {"identifier": ident, "ts": {"$gt": cutoff.isoformat()}}
     )
     if fails >= 5:
         raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
-
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
         await db.login_attempts.insert_one(
             {"identifier": ident, "ts": datetime.now(timezone.utc).isoformat()}
         )
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    # success: clear attempts
     await db.login_attempts.delete_many({"identifier": ident})
-
-    access = create_access_token(str(user["_id"]), user["email"])
-    refresh = create_refresh_token(str(user["_id"]))
-    set_auth_cookies(response, access, refresh)
+    set_auth_cookies(
+        response,
+        create_access_token(str(user["_id"]), user["email"]),
+        create_refresh_token(str(user["_id"])),
+    )
     return serialize_user(user)
 
 
@@ -281,9 +343,11 @@ async def refresh_token_route(request: Request, response: Response):
     user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    access = create_access_token(str(user["_id"]), user["email"])
-    response.set_cookie("access_token", access, httponly=True, secure=True,
-                        samesite="none", max_age=3600, path="/")
+    response.set_cookie(
+        "access_token",
+        create_access_token(str(user["_id"]), user["email"]),
+        httponly=True, secure=True, samesite="none", max_age=3600, path="/",
+    )
     return {"ok": True}
 
 
@@ -307,89 +371,105 @@ async def put_user_state(body: StateIn, user: dict = Depends(get_token_user)):
     return {"ok": True, "updated_at": now}
 
 
-# -------------------------------------------------------- STRIPE
-def _stripe_client(request: Request) -> StripeCheckout:
-    """Build StripeCheckout from emergentintegrations using current host for webhook."""
-    host = str(request.base_url).rstrip("/")
-    return StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host}/api/webhook/stripe")
-
-
-async def _grant_paid_period(user_id: str, days: int = PERIOD_DAYS):
-    """Mark a user as 'active' for `days` days from now (or extend existing period)."""
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user:
-        return
+# -------------------------------------------------------- STRIPE (raw SDK, subscription mode)
+async def _ensure_stripe_customer(user: dict) -> str:
     sub = user.get("subscription") or {}
-    now = datetime.now(timezone.utc)
-    cur_end = sub.get("current_period_end")
-    if isinstance(cur_end, str):
-        try:
-            cur_end_dt = datetime.fromisoformat(cur_end)
-            if cur_end_dt.tzinfo is None:
-                cur_end_dt = cur_end_dt.replace(tzinfo=timezone.utc)
-        except Exception:
-            cur_end_dt = None
-    else:
-        cur_end_dt = None
-    base = cur_end_dt if (cur_end_dt and cur_end_dt > now) else now
-    new_end = (base + timedelta(days=days)).isoformat()
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {
-            "subscription.status": "active",
-            "subscription.current_period_end": new_end,
-            "subscription.cancel_at_period_end": False,
-        }},
+    customer_id = sub.get("customer_id")
+    if customer_id:
+        return customer_id
+    cust = stripe.Customer.create(
+        email=user["email"],
+        name=user.get("name"),
+        metadata={"user_id": str(user["_id"])},
     )
+    await db.users.update_one(
+        {"_id": user["_id"]}, {"$set": {"subscription.customer_id": cust.id}}
+    )
+    return cust.id
+
+
+async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status="all", limit=5)
+    except Exception as e:
+        log.error("Subscription.list failed: %s", e)
+        return
+    if not subs.data:
+        return
+    priority = {"active": 0, "trialing": 1, "past_due": 2, "unpaid": 3,
+                "canceled": 4, "incomplete": 5, "incomplete_expired": 6}
+    chosen = sorted(subs.data, key=lambda s: priority.get(s.status, 9))[0]
+    upd = {
+        "subscription.status": chosen.status,
+        "subscription.customer_id": customer_id,
+        "subscription.subscription_id": chosen.id,
+        "subscription.current_period_end": (
+            datetime.fromtimestamp(chosen.current_period_end, tz=timezone.utc).isoformat()
+            if chosen.current_period_end else None
+        ),
+        "subscription.cancel_at_period_end": bool(chosen.cancel_at_period_end),
+    }
+    try:
+        cust = stripe.Customer.retrieve(
+            customer_id, expand=["invoice_settings.default_payment_method"]
+        )
+        pm = (cust.invoice_settings or {}).default_payment_method if cust.invoice_settings else None
+        if pm and getattr(pm, "card", None):
+            upd["subscription.brand"] = pm.card.brand
+            upd["subscription.last4"] = pm.card.last4
+    except Exception as e:
+        log.warning("payment-method fetch failed: %s", e)
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": upd})
 
 
 @api.post("/stripe/checkout")
 async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)):
-    """Create a $5 CAD one-time checkout. On success, grants 30 days of access."""
+    require_stripe()
     body = await request.json()
     origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
-
-    sc = _stripe_client(request)
-    req = CheckoutSessionRequest(
-        amount=PRICE_CAD,
-        currency="cad",
-        success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{origin}/billing/cancel",
-        metadata={"user_id": str(user["_id"]), "email": user["email"], "kind": "subscription_period"},
-    )
+    customer_id = await _ensure_stripe_customer(user)
     try:
-        session = await sc.create_checkout_session(req)
-    except Exception as e:
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            mode="subscription",
+            line_items=[{
+                "price_data": {
+                    "currency": "cad",
+                    "unit_amount": int(round(PRICE_CAD * 100)),
+                    "recurring": {"interval": "month"},
+                    "product_data": {"name": "timestables.ca Premium"},
+                },
+                "quantity": 1,
+            }],
+            success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{origin}/billing/cancel",
+            metadata={"user_id": str(user["_id"])},
+            subscription_data={"metadata": {"user_id": str(user["_id"])}},
+            allow_promotion_codes=True,
+        )
+    except stripe.error.StripeError as e:
         log.error("Stripe checkout failed: %s", e)
-        raise HTTPException(status_code=502, detail="Payment provider unavailable. Try again in a moment.")
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)[:160]}")
 
     await db.payment_transactions.insert_one({
-        "session_id": session.session_id,
+        "session_id": session.id,
         "user_id": str(user["_id"]),
         "email": user["email"],
         "amount": PRICE_CAD,
         "currency": "cad",
         "status": "initiated",
         "payment_status": "unpaid",
-        "kind": "subscription_period",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-
-    return {"url": session.url, "session_id": session.session_id}
+    return {"url": session.url, "session_id": session.id}
 
 
 @api.get("/stripe/status/{session_id}")
-async def stripe_session_status(session_id: str, request: Request, user: dict = Depends(get_token_user)):
-    sc = _stripe_client(request)
-    try:
-        status = await sc.get_checkout_status(session_id)
-    except Exception as e:
-        log.error("Stripe status fetch failed: %s", e)
-        raise HTTPException(status_code=502, detail="Could not check payment status.")
-
+async def stripe_status(session_id: str, user: dict = Depends(get_token_user)):
+    require_stripe()
+    sess = stripe.checkout.Session.retrieve(session_id)
     tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
-    paid = (status.payment_status == "paid")
-    if tx and tx.get("payment_status") != "paid" and paid:
+    if tx and tx.get("payment_status") != "paid" and sess.payment_status == "paid":
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {
@@ -398,68 +478,166 @@ async def stripe_session_status(session_id: str, request: Request, user: dict = 
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }},
         )
-        user_id = (status.metadata or {}).get("user_id") or str(user["_id"])
-        await _grant_paid_period(user_id, days=PERIOD_DAYS)
-
+        user_id = (sess.metadata or {}).get("user_id") or str(user["_id"])
+        if sess.customer:
+            await _sync_subscription_from_stripe(user_id, sess.customer)
     return {
-        "status": status.status,
-        "payment_status": status.payment_status,
-        "amount_total": status.amount_total,
-        "currency": status.currency,
+        "status": sess.status,
+        "payment_status": sess.payment_status,
+        "amount_total": sess.amount_total,
+        "currency": sess.currency,
     }
 
 
-@api.post("/stripe/cancel-renewal")
-async def stripe_cancel_renewal(user: dict = Depends(get_token_user)):
-    """Manual-renew flow: user just stops paying. Mark cancel_at_period_end = True."""
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"subscription.cancel_at_period_end": True}},
-    )
-    return {"ok": True}
-
-
-@api.post("/stripe/resume-renewal")
-async def stripe_resume_renewal(user: dict = Depends(get_token_user)):
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"subscription.cancel_at_period_end": False}},
-    )
-    return {"ok": True}
+@api.post("/stripe/portal")
+async def stripe_portal(request: Request, user: dict = Depends(get_token_user)):
+    require_stripe()
+    body = await request.json()
+    origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
+    customer_id = (user.get("subscription") or {}).get("customer_id")
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customer on file")
+    try:
+        portal = stripe.billing_portal.Session.create(
+            customer=customer_id, return_url=f"{origin}/settings"
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)[:160]}")
+    return {"url": portal.url}
 
 
 @api.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    sc = _stripe_client(request)
+    require_stripe()
     payload = await request.body()
     sig = request.headers.get("Stripe-Signature", "")
     try:
-        evt = await sc.handle_webhook(payload, sig)
+        if STRIPE_WEBHOOK_SECRET:
+            event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+        else:
+            import json as _json
+            event = stripe.Event.construct_from(_json.loads(payload), STRIPE_SECRET_KEY)
     except Exception as e:
-        log.error("Webhook handler failed: %s", e)
+        log.error("Webhook parse failed: %s", e)
         raise HTTPException(status_code=400, detail="Invalid webhook")
 
-    log.info("Webhook event: %s session=%s", evt.event_type, evt.session_id)
-    if evt.payment_status == "paid" and evt.session_id:
-        tx = await db.payment_transactions.find_one({"session_id": evt.session_id})
-        if tx and tx.get("payment_status") != "paid":
-            await db.payment_transactions.update_one(
-                {"session_id": evt.session_id},
-                {"$set": {
-                    "payment_status": "paid",
-                    "status": "complete",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                }},
-            )
-            user_id = (evt.metadata or {}).get("user_id") or tx.get("user_id")
-            if user_id:
-                await _grant_paid_period(user_id, days=PERIOD_DAYS)
+    obj = event["data"]["object"]
+    log.info("Stripe webhook: %s", event["type"])
+    customer_id = obj.get("customer")
+    user_id = (obj.get("metadata") or {}).get("user_id")
+    if not user_id and customer_id:
+        u = await db.users.find_one({"subscription.customer_id": customer_id})
+        if u:
+            user_id = str(u["_id"])
+    if user_id and customer_id:
+        try:
+            await _sync_subscription_from_stripe(user_id, customer_id)
+        except Exception as e:
+            log.error("subscription sync failed: %s", e)
     return {"received": True}
+
+
+# -------------------------------------------------------- ADMIN
+@api.get("/admin/stats")
+async def admin_stats(_: dict = Depends(get_admin_user)):
+    now = datetime.now(timezone.utc)
+    total_users = await db.users.count_documents({"role": {"$ne": "admin"}})
+    active_subs = await db.users.count_documents({"subscription.status": {"$in": ["active", "trialing", "past_due"]}})
+    trialing = await db.users.count_documents({
+        "subscription.status": {"$nin": ["active", "trialing", "past_due"]},
+        "trial_start": {"$gte": now - timedelta(days=TRIAL_DAYS)},
+    })
+
+    paid_tx = db.payment_transactions.find({"payment_status": "paid"}, {"_id": 0})
+    total_revenue = 0.0
+    by_day = {}
+    async for t in paid_tx:
+        amt = float(t.get("amount") or 0)
+        total_revenue += amt
+        day = (t.get("completed_at") or t.get("created_at") or "")[:10]
+        if day:
+            by_day[day] = by_day.get(day, 0) + amt
+    mrr = active_subs * PRICE_CAD
+
+    # signups last 30 days
+    cutoff = now - timedelta(days=30)
+    signups = []
+    cur = db.users.find(
+        {"role": {"$ne": "admin"}, "created_at": {"$gte": cutoff}},
+        {"_id": 0, "created_at": 1},
+    )
+    by_signup_day = {}
+    async for u in cur:
+        ts = u.get("created_at")
+        if isinstance(ts, datetime):
+            day = ts.date().isoformat()
+        else:
+            day = str(ts)[:10]
+        by_signup_day[day] = by_signup_day.get(day, 0) + 1
+    for i in range(30, -1, -1):
+        d = (now - timedelta(days=i)).date().isoformat()
+        signups.append({"date": d, "count": by_signup_day.get(d, 0)})
+
+    revenue_series = []
+    for i in range(30, -1, -1):
+        d = (now - timedelta(days=i)).date().isoformat()
+        revenue_series.append({"date": d, "amount": round(by_day.get(d, 0), 2)})
+
+    recent_payments = []
+    cur = db.payment_transactions.find(
+        {"payment_status": "paid"}, {"_id": 0}
+    ).sort("completed_at", -1).limit(8)
+    async for t in cur:
+        recent_payments.append({
+            "email": t.get("email"),
+            "amount": t.get("amount"),
+            "currency": t.get("currency"),
+            "completed_at": t.get("completed_at"),
+        })
+
+    return {
+        "total_users": total_users,
+        "active_subs": active_subs,
+        "trialing": trialing,
+        "mrr_cad": round(mrr, 2),
+        "total_revenue_cad": round(total_revenue, 2),
+        "signups_30d": signups,
+        "revenue_30d": revenue_series,
+        "recent_payments": recent_payments,
+    }
+
+
+@api.get("/admin/users")
+async def admin_users(_: dict = Depends(get_admin_user), q: str = "", limit: int = 50):
+    flt = {}
+    if q:
+        flt["email"] = {"$regex": q, "$options": "i"}
+    cur = db.users.find(flt, {"password_hash": 0}).sort("created_at", -1).limit(limit)
+    out = []
+    async for u in cur:
+        out.append(serialize_user(u))
+    return {"users": out}
+
+
+@api.get("/admin/cms")
+async def admin_cms_get(_: dict = Depends(get_admin_user)):
+    doc = await db.cms.find_one({"_id": "site"}) or {}
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/admin/cms")
+async def admin_cms_put(body: CMSIn, _: dict = Depends(get_admin_user)):
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    upd["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.cms.update_one({"_id": "site"}, {"$set": upd}, upsert=True)
+    doc = await db.cms.find_one({"_id": "site"}) or {}
+    doc.pop("_id", None)
+    return doc
 
 
 # ------------------------------------------------------------------ MOUNT
 app.include_router(api)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
