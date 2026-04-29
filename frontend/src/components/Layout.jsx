@@ -31,6 +31,19 @@ import { useAuth } from "@/lib/auth";
 import TrialBanner from "@/components/TrialBanner";
 import { loadCms, subscribeCms, getCmsCached } from "@/lib/cms";
 
+// Compact a count for the header pills:
+//   0–9999      → exact ("1023")
+//   10k–999k    → "12k"
+//   1m+         → "1.2m"
+// Keeps the HUD width predictable when coin balances climb.
+function formatCount(n) {
+  const v = Math.max(0, Math.floor(Number(n) || 0));
+  if (v < 10000) return v.toLocaleString();
+  if (v < 1_000_000) return `${Math.floor(v / 1000)}k`;
+  if (v < 10_000_000) return `${(v / 1_000_000).toFixed(1)}m`;
+  return `${Math.floor(v / 1_000_000)}m`;
+}
+
 export const Layout = ({ children }) => {
   const [state, setState] = useState(getState());
   const location = useLocation();
@@ -119,7 +132,7 @@ export const Layout = ({ children }) => {
             </nav>
           )}
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 flex-wrap justify-end min-w-0">
             {isAuthed && state.dailyStreak?.count > 0 && (
               <div
                 className="flex items-center gap-1 px-2 py-1.5 brut-border bg-amber-300 text-zinc-950"
@@ -128,7 +141,7 @@ export const Layout = ({ children }) => {
               >
                 <Flame size={13} />
                 <span className="font-mono text-xs font-bold tabular-nums">
-                  {state.dailyStreak.count}
+                  {formatCount(state.dailyStreak.count)}
                 </span>
               </div>
             )}
@@ -156,34 +169,34 @@ export const Layout = ({ children }) => {
               <>
                 <Link
                   to="/shop"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:-translate-y-px transition-all cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1.5 brut-border surface hover:bg-amber-100 dark:hover:bg-amber-950/40 hover:-translate-y-px transition-all cursor-pointer"
                   data-testid="hud-coins"
-                  title="Coins · go to Shop"
+                  title={`${state.coins.toLocaleString()} coins · go to Shop`}
                   aria-label="Open Shop"
                 >
-                  <Coins size={14} className="text-amber-500" />
+                  <Coins size={14} className="text-amber-500 shrink-0" />
                   <span className="font-mono text-sm tabular-nums text-fg font-semibold">
-                    {state.coins}
+                    {formatCount(state.coins)}
                   </span>
                 </Link>
                 <Link
                   to="/shop"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface hover:bg-cyan-100 dark:hover:bg-cyan-950/40 hover:-translate-y-px transition-all cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1.5 brut-border surface hover:bg-cyan-100 dark:hover:bg-cyan-950/40 hover:-translate-y-px transition-all cursor-pointer"
                   data-testid="hud-gems"
-                  title="Gems · go to Shop"
+                  title={`${(user?.gems ?? 0).toLocaleString()} gems · go to Shop`}
                   aria-label="Open Shop"
                 >
-                  <Gem size={14} className="text-cyan-500" />
+                  <Gem size={14} className="text-cyan-500 shrink-0" />
                   <span className="font-mono text-sm tabular-nums text-fg font-semibold">
-                    {user?.gems ?? 0}
+                    {formatCount(user?.gems ?? 0)}
                   </span>
                 </Link>
                 <div
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface min-w-[68px]"
+                  className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 brut-border surface min-w-[64px]"
                   data-testid="hud-level"
                 >
                   <span className="font-mono text-xs text-muted tabular-nums">L{Math.min(level, 9999)}</span>
-                  <div className="w-10 h-1 surface-2 rounded-full overflow-hidden">
+                  <div className="w-8 h-1 surface-2 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-600"
                       style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -194,14 +207,23 @@ export const Layout = ({ children }) => {
                   to="/settings"
                   data-testid="hud-user"
                   title={user.email}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 brut-border ${
+                  className={`flex items-center gap-1.5 px-2 py-1.5 brut-border ${
                     isAdmin ? "bg-amber-300 text-zinc-950" : "surface"
                   } hover:bg-blue-600 hover:text-white`}
                 >
                   {isAdmin ? <ShieldCheck size={13} /> : <UserIcon size={13} />}
-                  <span className="hidden sm:inline font-mono text-xs font-semibold max-w-[110px] truncate">
+                  <span className="hidden lg:inline font-mono text-xs font-semibold max-w-[90px] truncate">
                     {user.name}
                   </span>
+                </Link>
+                <Link
+                  to="/settings"
+                  data-testid="hud-settings"
+                  title="Settings"
+                  aria-label="Settings"
+                  className="p-2 rounded-md text-muted hover:text-fg hover:surface-2 transition-colors"
+                >
+                  <SettingsIcon size={16} />
                 </Link>
               </>
             )}

@@ -5,7 +5,7 @@ import { ArrowLeft, X, Divide, ArrowRight } from "lucide-react";
 import Question from "@/components/Question";
 import StepDivision from "@/components/StepDivision";
 import RemainderDivision from "@/components/RemainderDivision";
-import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
+import { recordAnswer, addCoinsAndXp, markCompletedActivityToday } from "@/lib/storage";
 import { generateLongDiv, generateStepDivision, generateRemainderDiv } from "@/lib/game";
 import { sfx } from "@/lib/sound";
 
@@ -108,6 +108,7 @@ const LongDiv = () => {
 
   const next = () => {
     if (idx + 1 >= totalLen) {
+      markCompletedActivityToday();
       setPhase("result");
       return;
     }

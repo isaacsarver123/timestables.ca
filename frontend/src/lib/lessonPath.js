@@ -1,14 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Programmatically generate the entire 1000-lesson path.
 // 67 levels × 15 lessons = 1005 lessons across 5 streams.
-// Each level ramps difficulty within its topic; the final lesson of a level
-// is the "unit boss". Levels are gated sequentially across the entire path.
+// Difficulty is a CONTINUOUS function of (stream, levelInStream): every
+// level index meaningfully ramps the question pool — table count grows,
+// max factor grows, long-form magnitudes grow. So lesson #1005 is
+// dramatically harder than lesson #1.
 // ─────────────────────────────────────────────────────────────────────────
 
 const LESSONS_PER_LEVEL = 15;
 
-// Streams describe the high-level "look" of each topic group. The order here
-// is the order they're rendered in the path.
 const STREAMS = [
   {
     topic: "multiplication", title: "Multiplication", op: "mul", isLong: false,
@@ -37,37 +37,88 @@ const STREAMS = [
   },
 ];
 
-// Difficulty ramp: as the level number inside a stream grows, push harder.
-function diffForLevel(stream, levelInStream) {
-  // For short topics (1-12 ish), scale tables/factors.
-  if (!stream.isLong && stream.topic !== "mixed") {
-    const ratio = levelInStream / Math.max(1, stream.levels - 1); // 0..1
-    if (ratio < 0.25) return { label: "Beginner", tables: [2, 3, 4, 5, 10], maxFactor: 10 };
-    if (ratio < 0.5)  return { label: "Easy",     tables: [2, 3, 4, 5, 6, 7, 8, 9, 10], maxFactor: 12 };
-    if (ratio < 0.75) return { label: "Medium",   tables: [3, 4, 6, 7, 8, 9, 11, 12], maxFactor: 14 };
-    if (ratio < 0.9)  return { label: "Hard",     tables: [6, 7, 8, 9, 11, 12, 13, 14, 15, 16], maxFactor: 17 };
-    return { label: "Expert", tables: [7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], maxFactor: 19 };
-  }
-  // Long mul/div: factors stay 11+, maxFactor scales.
-  if (stream.isLong) {
-    const ratio = levelInStream / Math.max(1, stream.levels - 1);
-    if (ratio < 0.33) return { label: "Easy",   tables: [11, 12, 13, 14, 15], maxFactor: 19, isLong: true };
-    if (ratio < 0.66) return { label: "Medium", tables: [12, 13, 14, 15, 16, 17, 18], maxFactor: 25, isLong: true };
-    return { label: "Hard", tables: [13, 14, 15, 16, 17, 18, 19, 20, 22, 24], maxFactor: 30, isLong: true };
-  }
-  // Mixed mastery: hardest of everything, all four ops mixed.
-  return { label: "Mastery", tables: [6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], maxFactor: 19 };
+const DIFF_BAND = ["Beginner", "Easy", "Easy+", "Medium", "Medium+", "Hard", "Hard+", "Expert", "Master"];
+
+// Pick a difficulty band by ratio (0..1) through the stream.
+function bandFor(ratio) {
+  const idx = Math.min(DIFF_BAND.length - 1, Math.floor(ratio * DIFF_BAND.length));
+  return DIFF_BAND[idx];
 }
 
-// Friendly title per level, e.g. "Multiplication · L1: ×2-5 (Beginner)".
+// Build the table list for short-form mul/div at a given level index.
+// Level 0 starts with just {2, 5, 10}. Each level adds one more table from a
+// canonical "next-table-to-introduce" list, eventually covering 2-19.
+const SHORT_TABLE_INTRO = [2, 5, 10, 3, 4, 6, 9, 11, 12, 7, 8, 13, 14, 15, 16, 17, 18, 19];
+
+function shortDiffFor(levelInStream, totalLevels) {
+  // tables: introduce one new table every level, capped at the full list.
+  const count = Math.min(SHORT_TABLE_INTRO.length, 3 + levelInStream);
+  const tables = SHORT_TABLE_INTRO.slice(0, count).sort((a, b) => a - b);
+  // maxFactor: ramps from 5 → 20 over the stream.
+  const ratio = levelInStream / Math.max(1, totalLevels - 1);
+  const maxFactor = Math.round(5 + ratio * 15); // 5..20
+  return {
+    label: bandFor(ratio),
+    tables,
+    maxFactor,
+    minFactor: levelInStream < 2 ? 1 : 2,
+    isLong: false,
+  };
+}
+
+// Long-form generators ramp factor-magnitude. Level 0 = 11 × 2-9. Level 14 =
+// 25 × 25 with 3-digit results.
+function longDiffFor(levelInStream, totalLevels) {
+  const ratio = levelInStream / Math.max(1, totalLevels - 1);
+  // factor lists grow: start with [11..15], end with [13..30].
+  const lo = 11 + Math.floor(ratio * 2); // 11..13
+  const hi = 15 + Math.floor(ratio * 15); // 15..30
+  const tables = [];
+  for (let n = lo; n <= Math.min(20, hi); n++) tables.push(n);
+  const maxFactor = Math.round(9 + ratio * 21); // 9..30
+  return {
+    label: bandFor(ratio),
+    tables,
+    maxFactor,
+    minFactor: 11,
+    isLong: true,
+  };
+}
+
+// Mastery: hardest of everything, all four ops mixed.
+function mixedDiffFor(levelInStream, totalLevels) {
+  const ratio = levelInStream / Math.max(1, totalLevels - 1);
+  const tables = [6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  const maxFactor = Math.round(15 + ratio * 10); // 15..25
+  return {
+    label: ratio < 0.5 ? "Master" : "Grand Master",
+    tables,
+    maxFactor,
+    minFactor: 2,
+    isLong: false,
+  };
+}
+
+function diffForLevel(stream, levelInStream) {
+  if (stream.topic === "mixed") return mixedDiffFor(levelInStream, stream.levels);
+  if (stream.isLong)            return longDiffFor(levelInStream, stream.levels);
+  return shortDiffFor(levelInStream, stream.levels);
+}
+
 function titleForLevel(stream, levelInStream, diff) {
   const base = `Level ${levelInStream + 1}`;
-  const detail =
-    stream.topic === "mixed"
-      ? "All four operations"
-      : stream.isLong
-      ? `${diff.label} · 2-digit × ${stream.op === "div" ? "1-digit ÷" : "1-digit"}`
-      : `×${diff.tables[0]}–${diff.tables[diff.tables.length - 1]}`;
+  let detail;
+  if (stream.topic === "mixed") {
+    detail = `All four operations · factors ≤ ${diff.maxFactor}`;
+  } else if (stream.isLong) {
+    detail = `${diff.tables[0]}–${diff.tables[diff.tables.length - 1]} × factor ≤ ${diff.maxFactor}`;
+  } else {
+    detail = `×${diff.tables.join(", ×")} · factor ≤ ${diff.maxFactor}`;
+    // If the table list is long, just show the bookends.
+    if (diff.tables.length > 5) {
+      detail = `×${diff.tables[0]}–${diff.tables[diff.tables.length - 1]} (${diff.tables.length} tables) · factor ≤ ${diff.maxFactor}`;
+    }
+  }
   return { base, detail };
 }
 
@@ -82,16 +133,21 @@ export function buildGiantPath() {
       const lessonsArr = [];
       for (let lj = 0; lj < LESSONS_PER_LEVEL; lj++) {
         const isBoss = lj === LESSONS_PER_LEVEL - 1;
+        // Per-lesson micro-ramp: lessons later in the level use a slightly
+        // tighter table subset / higher minFactor than earlier ones, so even
+        // within a level there's a small ramp. The unit boss uses the full
+        // hardest spec.
+        const lessonRatio = lj / (LESSONS_PER_LEVEL - 1); // 0..1
+        const minFactor = Math.max(diff.minFactor, Math.round(diff.minFactor + lessonRatio * 2));
+        const maxFactor = Math.round(diff.maxFactor - (1 - lessonRatio) * 2);
         lessonsArr.push({
           id: `L${levelGlobalIdx}_l${lj}`,
           label: isBoss ? "Unit boss" : `Lesson ${lj + 1}`,
           boss: isBoss,
-          // Per-lesson params: keep it identical inside a level so the
-          // pacing feels consistent. (Variation comes from the question
-          // generator's randomness.)
           topic: stream.topic === "mixed" ? "mixed" : stream.topic,
           tables: diff.tables,
-          maxFactor: diff.maxFactor,
+          minFactor,
+          maxFactor: Math.max(maxFactor, minFactor + 2),
           isLong: diff.isLong || stream.isLong,
           op: stream.op,
           difficultyLabel: diff.label,
@@ -106,7 +162,7 @@ export function buildGiantPath() {
         accent: stream.accent,
         accentSoft: stream.accentSoft,
         lessons: lessonsArr,
-        diff, // keep so test-out can sample identical questions
+        diff,
         stream,
       });
       levelGlobalIdx += 1;
@@ -115,8 +171,6 @@ export function buildGiantPath() {
   return levels;
 }
 
-// Flat array of every lesson across every level — used for sequential
-// unlock checks.
 export function flattenPath(path) {
   return path.flatMap((lv) => lv.lessons.map((l) => ({ ...l, levelIdx: lv.idx })));
 }

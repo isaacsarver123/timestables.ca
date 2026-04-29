@@ -13,6 +13,7 @@ import {
   addCoinsAndXp,
   consumePowerup,
   bumpBossLevel,
+  markCompletedActivityToday,
 } from "@/lib/storage";
 import { bossConfig, bossName, generateQuestion } from "@/lib/game";
 import { sfx } from "@/lib/sound";
@@ -121,6 +122,7 @@ const Boss = () => {
       if (np >= cfg.questions) {
         addCoinsAndXp(cfg.reward, 30 + level * 5);
         bumpBossLevel();
+        markCompletedActivityToday();
         sfx.levelup();
         setOutcome("win");
         setTimeout(() => setPhase("result"), 500);
@@ -151,6 +153,7 @@ const Boss = () => {
       if (np >= cfg.questions) {
         addCoinsAndXp(cfg.reward, 30 + level * 5);
         bumpBossLevel();
+        markCompletedActivityToday();
         sfx.levelup();
         setOutcome("win");
         setTimeout(() => setPhase("result"), 500);

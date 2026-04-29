@@ -22,10 +22,11 @@ import { toast } from "sonner";
 import Question from "@/components/Question";
 import LessonQuestion from "@/components/LessonQuestion";
 import LessonLoading from "@/components/LessonLoading";
+import CompletionCelebration from "@/components/CompletionCelebration";
 import ConfirmLeaveModal from "@/components/ConfirmLeaveModal";
 import { useNavGuard } from "@/lib/leaveGuard";
 import { generateQuestion, tableTips } from "@/lib/game";
-import { addCoinsAndXp, recordAnswer } from "@/lib/storage";
+import { addCoinsAndXp, recordAnswer, markCompletedActivityToday } from "@/lib/storage";
 import { sfx } from "@/lib/sound";
 import { api, formatErr } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -64,7 +65,7 @@ function saveProgress(p) {
 function questionFromSpec(spec) {
   // For "mixed", randomly pick mul or div per question.
   let op = spec.op === "mixed" ? (Math.random() < 0.5 ? "mul" : "div") : spec.op;
-  const minFactor = spec.isLong ? 11 : 2;
+  const minFactor = spec.minFactor ?? (spec.isLong ? 11 : 2);
   const maxFactor = spec.isLong ? Math.max(spec.maxFactor, 19) : spec.maxFactor;
   return generateQuestion(spec.tables, { minFactor, maxFactor, op });
 }
@@ -151,8 +152,10 @@ export default function Lessons() {
   const [hearts, setHearts] = useState(TEST_HEARTS);
   const [explanation, setExplanation] = useState(null);
   const [result, setResult] = useState(null);
+  const [streakInfo, setStreakInfo] = useState(null);
   const [progress, setProgress] = useState(loadProgress);
-  const [testTarget, setTestTarget] = useState(null); // level being tested out of
+  const [testTarget, setTestTarget] = useState(null); // legacy field used by render branches
+  const [jumpAim, setJumpAim] = useState(null); // { aimLesson, level? } during a jump-here test
   const startedAt = useRef(0);
 
   const { refresh } = useAuth();
@@ -248,11 +251,24 @@ export default function Lessons() {
       startedAt.current = performance.now();
     });
   };
-  const startTestOut = (level) => {
-    const specPool = level.lessons;
-    const spec = specPool[0];
-    enterLoading(spec, () => {
-      setTestTarget(level);
+  // "Jump here" lets the user prove they already know a lesson (or a level's
+  // worth of lessons) by passing a 20-question / 5-heart test calibrated to
+  // that specific lesson's difficulty. Pass marks that lesson AND every
+  // earlier path lesson as complete; fail leaves progress untouched.
+  // `target` can be either a single lesson spec OR a level object (we use
+  // its hardest lesson — the unit boss — to calibrate the test in that case).
+  const startJumpHere = (target) => {
+    // Normalise: figure out the lesson we're aiming for.
+    const isLevel = !!target.lessons;
+    const aimLesson = isLevel
+      ? target.lessons[target.lessons.length - 1] // unit boss
+      : target;
+    if (!aimLesson) return;
+    enterLoading(aimLesson, () => {
+      setJumpAim({ aimLesson, level: isLevel ? target : null });
+      // Build the test from the level's lesson pool when jumping a whole
+      // level, otherwise from the single lesson spec sampled 20 times.
+      const specPool = isLevel ? target.lessons : [aimLesson];
       const out = [];
       for (let i = 0; i < TEST_QUESTIONS; i++) {
         const s = specPool[i % specPool.length];
@@ -347,6 +363,8 @@ export default function Lessons() {
   const finishRun = async () => {
     const seconds = Math.round((performance.now() - startedAt.current) / 1000);
     setPhase("result");
+    // Universal streak credit — only counts the first completion of the day.
+    setStreakInfo(markCompletedActivityToday());
     if (activeLesson && activeLesson.id !== "__endless__") {
       const next = {
         ...progress,
@@ -382,34 +400,56 @@ export default function Lessons() {
 
   const finishTest = (passed) => {
     setPhase("testResult");
-    if (passed && testTarget) {
-      // Mark all lessons in the level complete + level complete.
+    // Credit the streak (idempotent for today) regardless of pass/fail —
+    // the user did finish a 20-question activity start-to-finish.
+    setStreakInfo(markCompletedActivityToday());
+    if (passed && jumpAim?.aimLesson) {
+      // Mark every flat-path lesson up to AND INCLUDING the aimLesson as
+      // complete, so the user truly "jumps" here. Also mark every level
+      // entirely covered by those lessons as complete.
+      const aimIdx = flatPath.findIndex((l) => l.id === jumpAim.aimLesson.id);
       const nextCompletedLessons = { ...progress.completedLessons };
-      testTarget.lessons.forEach((l) => {
-        nextCompletedLessons[l.id] = { at: Date.now(), via: "test_out" };
+      const nextCompletedLevels = { ...progress.completedLevels };
+      for (let i = 0; i <= aimIdx && i < flatPath.length; i++) {
+        const l = flatPath[i];
+        if (!nextCompletedLessons[l.id]) {
+          nextCompletedLessons[l.id] = { at: Date.now(), via: "jump_here" };
+        }
+      }
+      // Mark levels complete when every one of their lessons is now done.
+      path.forEach((lvl) => {
+        if (lvl.lessons.every((l) => nextCompletedLessons[l.id])) {
+          if (!nextCompletedLevels[lvl.idx]) {
+            nextCompletedLevels[lvl.idx] = { at: Date.now(), via: "jump_here" };
+          }
+        }
       });
       const next = {
         ...progress,
         completedLessons: nextCompletedLessons,
-        completedLevels: { ...progress.completedLevels, [testTarget.idx]: { at: Date.now() } },
+        completedLevels: nextCompletedLevels,
       };
       setProgress(next);
       saveProgress(next);
-      addCoinsAndXp(0, 60); // test-out reward
+      addCoinsAndXp(0, jumpAim.level ? 80 : 30); // bigger reward for jumping a whole level
     }
-    setResult({ passed, hearts });
+    setResult({ passed, hearts, jumpAim });
+    // Stash the aim's level (if any) for the result-screen UI; clear jumpAim.
+    setTestTarget(jumpAim?.level || null);
+    setJumpAim(null);
   };
 
   // ── render: LOADING (Brilliant-style intermission) ────────────────────────
   if (phase === "loading") {
     return (
       <LessonLoading
-        spec={loadingSpec}
-        durationMs={1800}
+        durationMs={4500}
         onDone={onLoadingDone}
         title={
-          testTarget && pendingStart && testTarget.id === loadingSpec?.id
-            ? "Loading test"
+          jumpAim
+            ? jumpAim.level
+              ? "Loading jump test"
+              : "Loading lesson test"
             : "Loading lesson"
         }
       />
@@ -519,9 +559,10 @@ export default function Lessons() {
     );
   }
 
-  // ── render: TEST (test-out) ───────────────────────────────────────────────
-  if (phase === "test" && testTarget) {
+  // ── render: TEST (jump-here) ──────────────────────────────────────────────
+  if (phase === "test" && jumpAim) {
     const pct = ((idx + (status === "idle" ? 0 : 1)) / TEST_QUESTIONS) * 100;
+    const aimingForLevel = !!jumpAim.level;
     return (
       <div className="max-w-3xl mx-auto" data-testid="lessons-page">
         <ConfirmLeaveModal
@@ -529,15 +570,20 @@ export default function Lessons() {
           onCancel={guard.cancel}
           onConfirm={guard.confirm}
           title="Quit the test?"
-          body={<>You'll keep any XP, but the level stays locked until you complete it.</>}
+          body={<>You'll keep any XP, but you won't jump ahead until you pass.</>}
           confirmLabel="Yes, leave"
           cancelLabel="No, keep going"
         />
         <div className="mb-4">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Test out</div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+            {aimingForLevel ? "Jump here · level test" : "Jump here · lesson test"}
+          </div>
           <h2 className="text-lg sm:text-xl font-bold tracking-tight text-fg" data-testid="test-target-title">
-            {testTarget.title}
+            {aimingForLevel ? jumpAim.level.title : jumpAim.aimLesson.label}
           </h2>
+          <div className="text-xs text-muted mt-0.5">
+            Pass with at least 16 / 20 correct (5 hearts) to unlock everything up to here.
+          </div>
         </div>
         <div className="flex items-center gap-3 mb-5">
           <button
@@ -606,21 +652,12 @@ export default function Lessons() {
             <Stat label="Hard" value={`${hardCorrect}/${HARD_DOTS}`} />
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto">
-            <div className="brut-border-soft surface-2 p-3 text-left flex items-center gap-3" data-testid="lesson-xp-earned">
-              <Zap size={20} className="text-blue-600" />
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">XP</div>
-                <div className="font-bold text-fg text-xl tabular-nums">+{result?.xp_earned ?? 0}</div>
-              </div>
-            </div>
-            <div className="brut-border-soft surface-2 p-3 text-left flex items-center gap-3" data-testid="lesson-gems-earned">
-              <Gem size={20} className="text-cyan-500" />
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Gems</div>
-                <div className="font-bold text-fg text-xl tabular-nums">+{result?.gems_earned ?? 0}</div>
-              </div>
-            </div>
+          <div className="max-w-md mx-auto text-left">
+            <CompletionCelebration
+              xp={result?.xp_earned ?? 0}
+              gems={result?.gems_earned ?? 0}
+              streakInfo={streakInfo}
+            />
           </div>
 
           {isPerfect && (
@@ -664,15 +701,19 @@ export default function Lessons() {
               passed ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
             }`}
           >
-            {passed ? <Trophy size={14} /> : <XCircle size={14} />} {passed ? "You tested out!" : "Test failed"}
+            {passed ? <Trophy size={14} /> : <XCircle size={14} />} {passed ? "You jumped ahead!" : "Test failed"}
           </motion.div>
           <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-fg">
-            {passed ? `${testTarget?.title} cleared.` : "More than 4 wrong answers."}
+            {passed
+              ? testTarget?.title
+                ? `${testTarget.title} cleared.`
+                : "Lesson cleared."
+              : "More than 4 wrong answers."}
           </h2>
           <p className="text-sm text-muted">
             {passed
-              ? `All ${testTarget?.lessons.length} lessons in this level are now marked complete and the next level is unlocked.`
-              : "Keep practising — try lessons in this level, or come back to the test later."}
+              ? "Every lesson up to and including this one is now marked complete."
+              : "Keep practising — try lessons leading up to this point, or come back later."}
           </p>
           <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <button
@@ -726,7 +767,7 @@ export default function Lessons() {
             isLevelUnlocked={isLevelUnlocked}
             isLevelCompleted={isLevelCompleted}
             onStart={(lesson, level) => startLessonFromPath(lesson, level)}
-            onTestOut={(level) => startTestOut(level)}
+            onJumpHere={(target) => startJumpHere(target)}
           />
           {/* Endless mode tile — locked until path is fully cleared */}
           <div className={`mt-8 brut-border ${allDone ? "brut-shadow surface" : "surface-2 opacity-70"} p-5 flex items-center gap-4`} data-testid="endless-tile">
@@ -852,6 +893,7 @@ const Stat = ({ label, value }) => (
 // ─────────────────────────────────────────────────────────────────────────
 // Centered zig-zag: lessons curve outward from the centre using a sine wave
 // so the path feels organic and uses the full width.
+// Each non-completed lesson has a hover/click popover offering "Jump here".
 // ─────────────────────────────────────────────────────────────────────────
 function LessonPath({
   path,
@@ -860,7 +902,7 @@ function LessonPath({
   isLevelUnlocked,
   isLevelCompleted,
   onStart,
-  onTestOut,
+  onJumpHere,
 }) {
   // Find next-up lesson across the entire path so we can pulse it.
   let nextLessonId = null;
@@ -881,7 +923,7 @@ function LessonPath({
         const completedInLevel = unit.lessons.filter((l) => isLessonCompleted(l.id)).length;
         return (
           <div key={unit.id} data-testid={`lesson-path-unit-${unit.id}`}>
-            {/* Level header */}
+            {/* Level header — includes the per-level "Jump here" button. */}
             <div className={`brut-border ${unit.accentSoft} px-4 py-3 mb-6 flex items-center gap-3`}>
               <div className={`w-10 h-10 brut-border ${unit.accent} grid place-items-center text-zinc-950 shrink-0`}>
                 {done ? <Trophy size={16} /> : !unlocked ? <Lock size={14} /> : <Star size={14} />}
@@ -895,12 +937,12 @@ function LessonPath({
               </div>
               {!done && (
                 <button
-                  onClick={() => onTestOut(unit)}
-                  data-testid={`lesson-path-test-${unit.id}`}
-                  title="Test out of this level"
-                  className="brut-border-soft surface-2 hover:bg-blue-600 hover:text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-fg shrink-0"
+                  onClick={() => onJumpHere(unit)}
+                  data-testid={`lesson-path-jump-level-${unit.id}`}
+                  title="Take a 20-question test calibrated to this level. Pass to skip everything before it."
+                  className="brut-border surface text-fg hover:bg-amber-300 hover:text-zinc-950 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1.5"
                 >
-                  Test out
+                  <ArrowRight size={11} /> Jump here
                 </button>
               )}
             </div>
@@ -911,8 +953,6 @@ function LessonPath({
                 const lessonUnlocked = isLessonUnlocked(lesson.id);
                 const lessonDone = isLessonCompleted(lesson.id);
                 const isNext = lesson.id === nextLessonId;
-                // Sine-wave offset from centre — width per step ≈ 90px in
-                // each direction. Period of 4 nodes feels natural.
                 const offset = Math.sin((i / 3) * Math.PI) * 90;
                 return (
                   <div
@@ -920,37 +960,15 @@ function LessonPath({
                     className="flex flex-col items-center mb-7 transition-transform"
                     style={{ transform: `translateX(${offset}px)` }}
                   >
-                    <button
-                      onClick={() => onStart(lesson, unit)}
-                      disabled={!lessonUnlocked}
-                      data-testid={`lesson-path-node-${lesson.id}`}
-                      aria-label={`${unit.title} · ${lesson.label}${lessonDone ? " (done)" : !lessonUnlocked ? " (locked)" : ""}`}
-                      className={`relative w-16 h-16 sm:w-20 sm:h-20 brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
-                        lessonDone
-                          ? `${unit.accent} text-zinc-950`
-                          : lessonUnlocked
-                          ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
-                          : "surface-2 text-muted cursor-not-allowed"
-                      } ${lesson.boss ? "rounded-md" : "rounded-full"}`}
-                    >
-                      {lessonDone ? (
-                        <CheckCircle2 size={26} strokeWidth={3} />
-                      ) : !lessonUnlocked ? (
-                        <Lock size={20} />
-                      ) : lesson.boss ? (
-                        <Trophy size={24} />
-                      ) : (
-                        <Star size={24} strokeWidth={2.5} />
-                      )}
-                      {isNext && (
-                        <motion.span
-                          className={`absolute inset-0 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-4 ring-amber-400`}
-                          animate={{ scale: [1, 1.1, 1], opacity: [0.7, 0.2, 0.7] }}
-                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                          style={{ pointerEvents: "none" }}
-                        />
-                      )}
-                    </button>
+                    <LessonNode
+                      lesson={lesson}
+                      unit={unit}
+                      done={lessonDone}
+                      unlocked={lessonUnlocked}
+                      isNext={isNext}
+                      onStart={() => onStart(lesson, unit)}
+                      onJump={() => onJumpHere(lesson)}
+                    />
                     <div className="text-[10px] uppercase tracking-[0.2em] font-bold mt-2 text-muted text-center">
                       {lesson.label}
                       {lesson.boss && <span className="ml-1 text-amber-600 dark:text-amber-400">★</span>}
@@ -962,6 +980,107 @@ function LessonPath({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// A single lesson node + a popover that appears on hover/focus (or tap on
+// touch devices) offering Start / Jump-here. Done lessons show no popover.
+// ─────────────────────────────────────────────────────────────────────────
+function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  // Show popover whenever the cursor hovers a non-completed node, or when
+  // it gains keyboard focus. A direct click on an unlocked node still just
+  // starts the lesson (the natural primary action).
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => !done && setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (done) return;
+          if (unlocked) {
+            // Direct path: start the lesson.
+            onStart();
+            close();
+          } else {
+            // Locked → show the popover so the user can hit "Jump here".
+            setOpen((v) => !v);
+          }
+        }}
+        onFocus={() => !done && setOpen(true)}
+        onBlur={() => setTimeout(close, 120)}
+        data-testid={`lesson-path-node-${lesson.id}`}
+        aria-label={`${unit.title} · ${lesson.label}${done ? " (done)" : !unlocked ? " (locked)" : ""}`}
+        aria-expanded={open}
+        className={`relative w-16 h-16 sm:w-20 sm:h-20 brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
+          done
+            ? `${unit.accent} text-zinc-950`
+            : unlocked
+            ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
+            : "surface-2 text-muted hover:-translate-y-0.5"
+        } ${lesson.boss ? "rounded-md" : "rounded-full"}`}
+      >
+        {done ? (
+          <CheckCircle2 size={26} strokeWidth={3} />
+        ) : !unlocked ? (
+          <Lock size={20} />
+        ) : lesson.boss ? (
+          <Trophy size={24} />
+        ) : (
+          <Star size={24} strokeWidth={2.5} />
+        )}
+        {isNext && (
+          <motion.span
+            className={`absolute inset-0 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-4 ring-amber-400`}
+            animate={{ scale: [1, 1.1, 1], opacity: [0.7, 0.2, 0.7] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
+      </button>
+
+      <AnimatePresence>
+        {open && !done && (
+          <motion.div
+            key="popover"
+            initial={{ opacity: 0, y: -6, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.95 }}
+            transition={{ duration: 0.14 }}
+            className="absolute left-1/2 top-full mt-3 -translate-x-1/2 z-30 w-60 surface brut-border brut-shadow p-3 rounded-md text-left"
+            data-testid={`lesson-path-popover-${lesson.id}`}
+            role="dialog"
+          >
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-bold">
+              {unit.title}
+            </div>
+            <div className="font-bold text-fg text-sm mb-1">
+              {lesson.label}
+              {lesson.boss && <span className="ml-1 text-amber-500">★</span>}
+            </div>
+            <div className="text-[11px] text-muted mb-3 leading-relaxed">
+              {unlocked
+                ? "Click the node to start, or jump here with a calibrated test (20 Q · 5 hearts) to mark this lesson and everything before it complete."
+                : "Locked — but you can jump here by passing the test."}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); onJump(); close(); }}
+                data-testid={`lesson-path-jump-${lesson.id}`}
+                className="flex-1 brut-border brut-shadow-sm bg-amber-300 text-zinc-950 font-bold uppercase tracking-wider text-[10px] py-2 px-2 hover:-translate-y-0.5"
+              >
+                Jump here
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

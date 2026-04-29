@@ -72,6 +72,40 @@ const Home = () => {
         </p>
       </section>
 
+      {/* Streak indicator — shows current daily streak with an animated flame.
+          Lit (amber) when the user has any streak, dim when they don't, with a
+          gentle prompt to start one today. */}
+      <section data-testid="home-streak">
+        {(() => {
+          const streak = state.dailyStreak?.count || 0;
+          const lit = streak > 0;
+          return (
+            <div className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-4 py-3.5 flex items-center gap-4 rounded-md`}>
+              <motion.div
+                animate={lit ? { scale: [1, 1.12, 1], rotate: [0, -6, 6, 0] } : { scale: 1 }}
+                transition={lit ? { duration: 2.4, repeat: Infinity, ease: "easeInOut" } : { duration: 0 }}
+                className={`w-11 h-11 brut-border grid place-items-center ${lit ? "bg-rose-500 text-white" : "surface text-muted"}`}
+              >
+                <Flame size={20} strokeWidth={2.5} fill={lit ? "currentColor" : "none"} />
+              </motion.div>
+              <div className="flex-1 min-w-0">
+                <div className={`text-[10px] uppercase tracking-[0.25em] font-bold ${lit ? "text-zinc-900" : "text-muted"}`}>
+                  Daily streak
+                </div>
+                <div className="font-bold text-base">
+                  {lit
+                    ? `${streak}-day streak${streak >= 7 ? " · keep it up!" : ""}`
+                    : "No streak yet — finish any activity today to start one."}
+                </div>
+              </div>
+              <div className="font-mono font-black text-3xl tabular-nums" data-testid="home-streak-count">
+                {streak}
+              </div>
+            </div>
+          );
+        })()}
+      </section>
+
       {/* Modes */}
       <section data-testid="modes-section" className="space-y-3">
         <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, X, Grid3x3, ArrowRight } from "lucide-react";
 import Question from "@/components/Question";
 import StepMultiplication from "@/components/StepMultiplication";
-import { recordAnswer, addCoinsAndXp } from "@/lib/storage";
+import { recordAnswer, addCoinsAndXp, markCompletedActivityToday } from "@/lib/storage";
 import { generateLongMul, generateDecimalMul, generateStepMultiplication } from "@/lib/game";
 import { sfx } from "@/lib/sound";
 
@@ -53,6 +53,7 @@ const LongMul = () => {
 
   const next = () => {
     if (idx + 1 >= totalLen) {
+      markCompletedActivityToday();
       setPhase("result");
       return;
     }

@@ -27,7 +27,30 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5.2 — 1000-Lesson Path + Brilliant-style in-lesson UI (this round)
+### v5.3 — Real difficulty progression + Jump-here UX + Universal streaks (this round)
+- **Header overflow fix** — HUD pills now wrap to a second row when the screen runs out of width (`flex-wrap justify-end`), and coin/gem counts compact at scale: 0–9999 show with locale commas (`1,029`), 10k–999k as `123k`, ≥1m as `1.2m`. Level pill + user-name span pushed to `lg+` breakpoints so mid-width devices stay clean. The header no longer bleeds past the viewport at any zoom level.
+- **150+ tip pool** (`lib/lessonTips.js`) — 163 hand-curated tips covering ×2-×20 tricks, mental-math shortcuts, division rules, number-theory patterns, real-world hooks, and brain-tickling facts. Each tip < 220 chars so it reads cleanly on the splash card.
+- **Loading splash bumped to 4500ms** — long enough to actually read the tip.
+- **Continuous difficulty scaling** in `lib/lessonPath.js`: every level index materially ramps. Level 1 = ×2/×5/×10 with factor ≤ 5 (Beginner). Level 17 = 18 tables up to factor ≤ 20 (Expert). Level 67 = mixed Grand Master with factors ≤ 25. Within a level, lessons also micro-ramp (`minFactor`/`maxFactor` interpolate over the 15 lessons). The unit boss uses the hardest spec.
+- **"Jump here" replaces "Test out"**:
+  - Hover or focus any non-completed lesson node → popover slides down with lesson info + a single "Jump here" button.
+  - Click an unlocked node directly → lesson starts (no popover needed).
+  - Each level header now has a big "Jump here" button (replaces the old "Test out" button).
+  - Jump-here test is **20 Q · 5 hearts** calibrated to the *lesson's* difficulty (or the level's hardest lesson when jumping a whole level).
+  - Pass marks **every lesson up to and including** the target as complete (`via: "jump_here"`), then auto-marks any covered levels complete. Fail leaves progress untouched.
+- **Universal streak credit + celebration**:
+  - New `markCompletedActivityToday()` helper in `storage.js` — idempotent for the rest of today, returns `{ wasFirst, streak, gemsAwarded, isStreakStart }`.
+  - Wired into Lessons (every finish), QuickFire/Streak (via `recordRunResult`), Boss (win path), LongMul/LongDiv (final-question path), Daily (already existed).
+  - Streak gem rewards at thresholds: 1, 3, 7, 14, 25, 50, 100, 200, 365 days.
+- **`<CompletionCelebration>`** end-of-run component with:
+  - Animated **XP count-up** (ease-out cubic, 950ms).
+  - **Streak fire-lit reveal** when `wasFirst === true` — flame icon scales/rotates from grey to filled rose, card flips amber, the streak count pops in.
+  - **Gem milestone badge** at threshold days, with rotating gem icon and animated count-in.
+  - Used on the Lessons end-screen; ready to drop into any other mode.
+- **Home page streak card** — animated flame + day count under the hero. Lit (amber) when streak > 0 with a continuous pulse; dim with "Start one today" copy when 0.
+- **Settings gear** restored at the far right of the header (was removed earlier).
+
+### v5.2 — 1000-Lesson Path + Brilliant-style in-lesson UI (prior round)
 - **1005 lessons across 67 levels**, generated programmatically in `lib/lessonPath.js`. Streams: Multiplication (17 lvls), Division (17), Long Multiplication (15), Long Division (15), Mastery (3). Difficulty ramps within each stream (Beginner → Easy → Medium → Hard → Expert). Each level has 15 lessons; the last is a unit-boss node.
 - **Test-out per level**: 20 questions, **5 hearts**. Each wrong answer drops a heart; 0 hearts = fail. Pass marks all 15 lessons in the level complete and unlocks the next level (+60 XP).
 - **Endless mode**: locked tile that unlocks once every lesson is cleared, then auto-generates random hard questions for unlimited play.

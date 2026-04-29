@@ -247,6 +247,10 @@ export function recordRunResult({ mode, score, streak }) {
     if (mode === "quickfire" && score > s.bestQuickFire) next.bestQuickFire = score;
     return next;
   });
+  // Universal streak credit — every finished run counts (Boss/QuickFire/
+  // Streak/LongMul/LongDiv/Lesson all eventually flow through here OR call
+  // markCompletedActivityToday directly).
+  return markCompletedActivityToday();
 }
 
 export function bumpBossLevel() {
@@ -274,6 +278,54 @@ export function setDailyResult({ date, score, total }) {
       dailyStreak: { count, lastDate: date },
     };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Universal "I finished an activity today" hook.
+//   - Idempotent for the rest of today (already counted → returns wasFirst:false)
+//   - Bumps the daily streak count (adds 1 if yesterday counted, else resets to 1)
+//   - At milestone thresholds, awards bonus gems (added straight to coins for
+//     now since gems are server-side; the celebration UI shows the badge).
+// Returns the new streak state plus what just happened so callers can play
+// the right end-of-run animations.
+// ─────────────────────────────────────────────────────────────────────────
+const STREAK_GEM_REWARDS = {
+  1: 1,
+  3: 3,
+  7: 5,
+  14: 8,
+  25: 15,
+  50: 25,
+  100: 50,
+  200: 75,
+  365: 150,
+};
+
+export function markCompletedActivityToday() {
+  const today = todayStr();
+  const s = getState();
+  const prev = s.dailyStreak || { count: 0, lastDate: null };
+  if (prev.lastDate === today) {
+    return {
+      wasFirst: false,
+      streak: prev.count,
+      gemsAwarded: 0,
+      isStreakStart: false,
+    };
+  }
+  const isStreakStart = prev.lastDate !== yesterdayStr();
+  const nextCount = isStreakStart ? 1 : (prev.count || 0) + 1;
+  const gemsAwarded = STREAK_GEM_REWARDS[nextCount] || 0;
+  updateState((cur) => ({
+    ...cur,
+    dailyStreak: { count: nextCount, lastDate: today },
+  }));
+  return {
+    wasFirst: true,
+    streak: nextCount,
+    gemsAwarded,
+    isStreakStart,
+  };
 }
 
 export function resetPreferences() {

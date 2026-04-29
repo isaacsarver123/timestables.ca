@@ -1,31 +1,13 @@
-// Pre-lesson splash: "Did you know?" tip + progress bar that fills over ~1.8s
-// then auto-advances the parent. Brilliant-style intermission.
+// Pre-lesson splash: "Did you know?" tip + progress bar.
+// Picks from a 150+ tip pool (lib/lessonTips.js), held for ~4.5s so the
+// reader has time to actually digest the line.
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Lightbulb } from "lucide-react";
-import { tableTips } from "@/lib/game";
+import { pickRandomTip } from "@/lib/lessonTips";
 
-const KIND_LABEL = {
-  trick: "Trick",
-  formula: "Formula",
-  rule: "Rule",
-  pattern: "Pattern",
-  anchor: "Anchor",
-};
-
-function pickTip(spec) {
-  // Pick a representative table from the spec to source a tip from.
-  let factor = 7;
-  if (spec?.tables?.length) {
-    factor = spec.tables[Math.floor(Math.random() * spec.tables.length)];
-  }
-  const tips = tableTips(factor);
-  const tip = tips[Math.floor(Math.random() * tips.length)] || tips[0];
-  return { factor, tip };
-}
-
-export default function LessonLoading({ spec, durationMs = 1800, onDone, title = "Loading lesson" }) {
-  const [{ factor, tip }] = useState(() => pickTip(spec));
+export default function LessonLoading({ durationMs = 4500, onDone, title = "Loading lesson" }) {
+  const [tip] = useState(() => pickRandomTip());
   const [pct, setPct] = useState(0);
 
   useEffect(() => {
@@ -60,9 +42,7 @@ export default function LessonLoading({ spec, durationMs = 1800, onDone, title =
 
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-muted mb-6">
           <Lightbulb size={12} className="text-amber-500" />
-          <span className="font-bold">{KIND_LABEL[tip.kind] || "Tip"}</span>
-          <span>·</span>
-          <span className="font-mono">×{factor} table</span>
+          <span className="font-bold">{tip.kindLabel}</span>
         </div>
 
         <div className="h-2.5 brut-border-soft surface-2 overflow-hidden rounded-full" data-testid="lesson-loading-bar">
