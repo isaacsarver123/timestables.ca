@@ -116,6 +116,110 @@ export function dailyQuestions(count = 30, op = "mixed") {
   return list;
 }
 
+// Long-form (multi-digit) generators
+export function generateLongMul(opts = {}) {
+  const { rng = Math.random, lastKey, difficulty = "medium" } = opts;
+  // easy: 2x1 (10-25 × 2-9). medium: 2x2 (10-99 × 10-99). hard: 3x2.
+  for (let i = 0; i < 30; i++) {
+    let a, b;
+    if (difficulty === "easy") {
+      a = Math.floor(rng() * 16) + 10; // 10-25
+      b = Math.floor(rng() * 8) + 2; // 2-9
+    } else if (difficulty === "hard") {
+      a = Math.floor(rng() * 900) + 100; // 100-999
+      b = Math.floor(rng() * 90) + 10; // 10-99
+    } else {
+      a = Math.floor(rng() * 90) + 10; // 10-99
+      b = Math.floor(rng() * 90) + 10; // 10-99
+    }
+    const key = `lm_${a}x${b}`;
+    if (key !== lastKey) {
+      return { a, b, op: "×", prompt: `${a} × ${b}`, answer: a * b, key };
+    }
+  }
+  return { a: 12, b: 13, op: "×", prompt: "12 × 13", answer: 156, key: "lm_12x13_f" };
+}
+
+export function generateLongDiv(opts = {}) {
+  const { rng = Math.random, lastKey, difficulty = "medium" } = opts;
+  for (let i = 0; i < 30; i++) {
+    let divisor, quotient;
+    if (difficulty === "easy") {
+      divisor = Math.floor(rng() * 6) + 2; // 2-7
+      quotient = Math.floor(rng() * 9) + 11; // 11-19
+    } else if (difficulty === "hard") {
+      divisor = Math.floor(rng() * 18) + 7; // 7-24
+      quotient = Math.floor(rng() * 90) + 11; // 11-100
+    } else {
+      divisor = Math.floor(rng() * 12) + 3; // 3-14
+      quotient = Math.floor(rng() * 40) + 11; // 11-50
+    }
+    const dividend = divisor * quotient;
+    const key = `ld_${dividend}/${divisor}`;
+    if (key !== lastKey) {
+      return {
+        a: dividend,
+        b: divisor,
+        op: "÷",
+        prompt: `${dividend} ÷ ${divisor}`,
+        answer: quotient,
+        key,
+      };
+    }
+  }
+  return { a: 144, b: 12, op: "÷", prompt: "144 ÷ 12", answer: 12, key: "ld_144/12_f" };
+}
+
+// Multiple choice options for a given question (Learn mode)
+export function generateChoices(question, count = 4, rng = Math.random) {
+  const correct = question.answer;
+  const set = new Set([correct]);
+  let guard = 0;
+  while (set.size < count && guard++ < 50) {
+    let delta = Math.floor(rng() * 21) - 10; // -10..10
+    if (delta === 0) delta = 1;
+    const c = correct + delta;
+    if (c > 0 && c !== correct) set.add(c);
+  }
+  const arr = Array.from(set);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Skip-counting fill-in: produce a sequence of multiples of `table` with one blank
+export function generateSkipCounting(table, opts = {}) {
+  const { rng = Math.random, length = 6 } = opts;
+  const start = Math.floor(rng() * 7) + 1; // 1..7
+  const seq = [];
+  for (let i = 0; i < length; i++) seq.push((start + i) * table);
+  const blank = Math.floor(rng() * (length - 2)) + 1;
+  return {
+    table,
+    seq,
+    blank,
+    answer: seq[blank],
+    key: `sc_${table}_${start}_${blank}_${length}`,
+  };
+}
+
+// Build flashcards covering 1×n through 12×n for a given table
+export function flashcardSet(table) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const k = i + 1;
+    return {
+      front: `${k} × ${table}`,
+      back: String(k * table),
+      key: `fc_${table}_${k}`,
+      a: k,
+      b: table,
+      answer: k * table,
+    };
+  });
+}
+
 // Tips per table for Learn mode
 export function tableTips(n) {
   const tips = {

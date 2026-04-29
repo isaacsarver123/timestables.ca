@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getState, setSelectedTables, setOpMode, subscribe } from "@/lib/storage";
+import { getState, setSelectedTables, subscribe } from "@/lib/storage";
 
 const ALL = Array.from({ length: 20 }, (_, i) => i + 1);
 
@@ -26,12 +26,6 @@ export const RangeSelector = () => {
     if (preset === "all") setSelectedTables(ALL);
     if (preset === "tough") setSelectedTables([6, 7, 8, 9, 11, 12, 13, 14, 17, 19]);
   };
-
-  const opChips = [
-    ["mul", "×"],
-    ["div", "÷"],
-    ["mixed", "Mixed"],
-  ];
 
   return (
     <div className="surface brut-border p-5 sm:p-6" data-testid="range-selector">
@@ -84,29 +78,8 @@ export const RangeSelector = () => {
         })}
       </div>
 
-      <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
-        <div className="text-xs font-mono text-muted">
-          {selected.length} of 20 selected
-        </div>
-        <div className="flex gap-1.5" data-testid="op-mode-chips">
-          {opChips.map(([key, label]) => {
-            const active = state.opMode === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setOpMode(key)}
-                data-testid={`op-${key}`}
-                className={`px-3 py-1.5 brut-border text-xs font-bold transition-colors ${
-                  active
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
-                    : "surface text-fg hover:surface-2"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+      <div className="mt-4 text-xs font-mono text-muted">
+        {selected.length} of 20 selected · tap to toggle
       </div>
     </div>
   );

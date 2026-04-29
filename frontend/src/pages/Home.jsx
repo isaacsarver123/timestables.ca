@@ -1,7 +1,17 @@
 import { Link } from "react-router-dom";
-import { Zap, Flame, Skull, ArrowRight, BookOpen, CalendarCheck } from "lucide-react";
+import {
+  Zap,
+  Flame,
+  Skull,
+  ArrowRight,
+  BookOpen,
+  CalendarCheck,
+  Grid3x3,
+  Divide,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import RangeSelector from "@/components/RangeSelector";
+import OpPicker from "@/components/OpPicker";
 import { getState, subscribe } from "@/lib/storage";
 import { useEffect, useState } from "react";
 
@@ -51,7 +61,10 @@ const Home = () => {
         </p>
       </section>
 
-      {/* Settings */}
+      {/* Operation */}
+      <OpPicker />
+
+      {/* Tables */}
       <RangeSelector />
 
       {/* Modes */}
@@ -86,6 +99,47 @@ const Home = () => {
               </motion.div>
             );
           })}
+        </div>
+      </section>
+
+      {/* Long-form */}
+      <section data-testid="long-section" className="space-y-3">
+        <h2 className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+          Long-form practice
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            to="/play/long-mul"
+            data-testid="mode-long-mul"
+            className="group surface brut-border brut-shadow p-5 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:brut-shadow-lg transition-all flex items-center gap-4"
+          >
+            <div className="w-11 h-11 brut-border bg-violet-300 text-zinc-950 grid place-items-center">
+              <Grid3x3 size={20} strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-bold text-fg">Long Multiplication</div>
+              <div className="text-xs text-muted">
+                Multi-digit × multi-digit. 2×1, 2×2, or 3×2 difficulty.
+              </div>
+            </div>
+            <ArrowRight size={16} className="text-muted group-hover:text-fg" />
+          </Link>
+          <Link
+            to="/play/long-div"
+            data-testid="mode-long-div"
+            className="group surface brut-border brut-shadow p-5 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:brut-shadow-lg transition-all flex items-center gap-4"
+          >
+            <div className="w-11 h-11 brut-border bg-rose-300 text-zinc-950 grid place-items-center">
+              <Divide size={20} strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-bold text-fg">Long Division</div>
+              <div className="text-xs text-muted">
+                Whole-number quotients. Choose your difficulty.
+              </div>
+            </div>
+            <ArrowRight size={16} className="text-muted group-hover:text-fg" />
+          </Link>
         </div>
       </section>
 

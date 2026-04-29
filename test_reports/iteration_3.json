@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only E2E testing of iteration 3 (Times Tables). Verified new OpPicker on home (op-mul/op-div/op-mixed, blue highlight on selection, persists across reload via localStorage). Long-form tiles (mode-long-mul, mode-long-div) navigate to /play/long-mul and /play/long-div. Learn page exposes all 5 tabs (tab-table, tab-flash, tab-choices, tab-skip, tab-drill). Flashcards: 12-card cycle (1×n…12×n), flip via flash-card, knew/missed advance, flash-done with flash-restart, reshuffles when picking a different table. Multiple choice: 4 buttons (data-testid choice-{value}) plus container choice-grid; correct selection turns emerald-500, wrong selection turns red-500 and reveals the correct answer in green; score counter increments. Skip-counting: skip-input + skip-submit work, score increments on correct answer with sequence reshuffle. Drill tab still functional. Long Multiplication: brief screen with diff-easy/diff-medium/diff-hard, 8-question round, coin reward = 3/5/8 per correct (verified easy: +24, medium: +40, hard would be +64), end shows long-mul-result with long-mul-again. Long Division: same flow, hard difficulty 8 correct gave +64 coins; long-div-result shows; Play-again returns to long-div-brief. RangeSelector no longer renders op chips (op-mul lives inside op-picker). No console errors observed. Coins increment correctly: flashcard knew-it +1, choices correct +1, skip correct +1, long-mul/div per difficulty.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LongMul.jsx and LongDiv.jsx import useEffect but never use it (unused import). Cosmetic — no functional impact.",
+    "generateLongMul/generateLongDiv use a 30-iteration anti-repeat loop and only check lastKey; for medium difficulty (10–99 × 10–99) the keyspace is huge so the fallback (12×13) is essentially unreachable, but for easy long-mul (16×8 = 128 unique pairs) repeats are more likely after many rounds. Acceptable.",
+    "ChoicesView builds the round in useState(buildRound) and again immediately in useEffect on mount — produces a brief double-render of two different rounds (no visual flicker observed but a tiny waste). Minor.",
+    "Learn.jsx FlashView/ChoicesView/SkipView each implement near-identical 'reset on n change' patterns; could be DRY'd into a useResetOnDep hook.",
+    "Skip-counting: blank index is uniformly random in [1, length-2] so the first and last positions are never blank — works as designed but worth documenting (the input is never the last visible cell).",
+    "data-testid='choice-grid' on the container div uses the same prefix as the four 'choice-{value}' option buttons; selectors using [data-testid^=\"choice-\"] will match the grid too. Consider renaming the container to e.g. 'choices-grid' to keep prefix-matching test selectors clean.",
+    "Long mul/div input accepts only the standard <input> from Question.jsx; no specific length/maxLength applied. With hard 3×2 multiplication, a 5-digit answer is fine in current width but worth noting on small mobile breakpoints."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "N/A (no auth)",
+  "seed_data_creation": "Cleared localStorage between tests. Read tt_arena_state_v2.coins to assert coin deltas.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 3 ships clean. Notes for future selectors: container 'choice-grid' shares prefix with 'choice-{value}' buttons — use [data-testid^='choice-']:not([data-testid='choice-grid']) or restrict to button[data-testid^='choice-']. AnimatePresence on Learn keys by `${tab}-${n}` so switching the table briefly keeps the exiting view in the DOM (~150ms); add a 300ms+ wait after learn-pick-N before reading inner_text. Long-mul reward map: easy=3, medium=5, hard=8 coins per correct. Long-div same map. flash knew=+1, choices correct=+1, skip correct=+1.",
+  "rca of the issue": "No issues found. All 14 listed feature points verified end-to-end."
+}

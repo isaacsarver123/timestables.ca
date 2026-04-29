@@ -11,6 +11,8 @@ import Stats from "@/pages/Stats";
 import Shop from "@/pages/Shop";
 import Learn from "@/pages/Learn";
 import Daily from "@/pages/Daily";
+import LongMul from "@/pages/LongMul";
+import LongDiv from "@/pages/LongDiv";
 import { getState, subscribe } from "@/lib/storage";
 import { setSoundEnabled } from "@/lib/sound";
 
@@ -48,6 +50,8 @@ function App() {
             <Route path="/play/streak" element={<Streak />} />
             <Route path="/play/boss" element={<Boss />} />
             <Route path="/play/daily" element={<Daily />} />
+            <Route path="/play/long-mul" element={<LongMul />} />
+            <Route path="/play/long-div" element={<LongDiv />} />
             <Route path="/stats" element={<Stats />} />
             <Route path="/shop" element={<Shop />} />
           </Routes>
