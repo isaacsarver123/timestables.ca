@@ -278,10 +278,9 @@ export default function LessonQuestion({ question, onAnswer, status }) {
   const localResolved = chosen != null;
 
   const submit = (n) => {
-    if (chosen != null) return;          // already answered locally
-    if (status !== "idle") return;       // also gate on parent status
+    if (chosen != null) return; // already answered locally — guard against double-submit only
     setChosen(n);
-    onAnswer(n);                         // notify parent (sync)
+    onAnswer(n);
   };
 
   let visual;

@@ -74,7 +74,8 @@ const Home = () => {
             return (
               <div
                 data-testid="home-streak"
-                className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-2.5 py-1.5 flex items-center gap-2 rounded-md shrink-0 ml-auto`}
+                className={`brut-border ${lit ? "bg-amber-300 text-zinc-950" : "surface-2 text-fg"} px-2.5 py-1.5 flex items-center gap-2 rounded-md shrink-0`}
+                style={{ marginLeft: "clamp(2rem, 12vw, 9rem)" }}
               >
                 <motion.div
                   animate={lit ? { scale: [1, 1.12, 1], rotate: [0, -6, 6, 0] } : { scale: 1 }}

@@ -1077,8 +1077,8 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.95 }}
             transition={{ duration: 0.14 }}
-            className="absolute left-1/2 top-full -translate-x-1/2 z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto"
-            style={{ marginTop: 0, paddingTop: 12 }}
+            className="absolute left-full top-1/2 -translate-y-1/2 z-50 w-56 surface brut-border brut-shadow rounded-md text-left pointer-events-auto"
+            style={{ marginLeft: 0, paddingLeft: 12, paddingTop: 12, paddingRight: 12, paddingBottom: 12 }}
             data-testid={`lesson-path-popover-${lesson.id}`}
             role="dialog"
           >
