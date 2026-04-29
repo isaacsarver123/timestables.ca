@@ -27,7 +27,17 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5.3 — Real difficulty progression + Jump-here UX + Universal streaks (this round)
+### v5.5 — Lesson visual polish + draggable number-line + cursor-react + header polish (this round)
+- **Capped visual canvas** at `max-w-sm aspect-[5/4] max-h-[40vh]` so tiny values like 2×1 / 2×2 render proportionally — no more screen-filling single-block bug.
+- **Removed the dashed green outline ring** from clusters; replaced with a subtle 8%-opacity rounded backdrop tile. No more visual confusion.
+- **Cursor-react dot grid** — dots within ~2.5 cell-widths of the pointer spring away gently (max ~7px push) for a tactile "alive" feel.
+- **Draggable number-line** for division: pointer-down/move/up, snaps to integer ticks, releasing at the correct dividend auto-submits the answer.
+- **Header collapsed to a single 66px row** at 1280px+ — pills tightened (px-1.5/py-1, smaller icons), level pill dropped (redundant with Stats), user name pushed to xl+, no flex-wrap.
+- **Home streak relocated inline** beside the hero ("Practice multiplication and division." + compact STREAK · N pill on the right at desktop, stacked on mobile).
+- **Lesson play UI fits the viewport** (`h-[calc(100dvh-180px)] flex flex-col -my-4 sm:-my-6`) — verified at 1280×900: scrollHeight === innerHeight, no scroll.
+- **Visual variety wired**: dotGrid / stackedBars / clusters (multiplication) · numberLine (draggable) / divGroups (division) · bigNumber fallback. Variant picked deterministically from `q.key`.
+
+### v5.3 — Real difficulty progression + Jump-here UX + Universal streaks (prior round)
 - **Header overflow fix** — HUD pills now wrap to a second row when the screen runs out of width (`flex-wrap justify-end`), and coin/gem counts compact at scale: 0–9999 show with locale commas (`1,029`), 10k–999k as `123k`, ≥1m as `1.2m`. Level pill + user-name span pushed to `lg+` breakpoints so mid-width devices stay clean. The header no longer bleeds past the viewport at any zoom level.
 - **150+ tip pool** (`lib/lessonTips.js`) — 163 hand-curated tips covering ×2-×20 tricks, mental-math shortcuts, division rules, number-theory patterns, real-world hooks, and brain-tickling facts. Each tip < 220 chars so it reads cleanly on the splash card.
 - **Loading splash bumped to 4500ms** — long enough to actually read the tip.
