@@ -158,7 +158,7 @@ export const Layout = ({ children }) => {
                   </span>
                 </div>
                 <div
-                  className="hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 brut-border surface"
                   data-testid="hud-gems"
                   title="Gems"
                 >
