@@ -54,8 +54,20 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-const PUSH_FORCE = 0.4;
-const PUSH_RANGE_MULT = 1.65;
+function idleDrift(i, amp = 1.8) {
+  const angleA = ((i * 47) % 360) * (Math.PI / 180);
+  const angleB = angleA + 1.9;
+  return {
+    x1: Math.cos(angleA) * amp,
+    y1: Math.sin(angleA) * amp,
+    x2: Math.cos(angleB) * amp,
+    y2: Math.sin(angleB) * amp,
+    duration: 4.2 + (i % 5) * 0.45,
+  };
+}
+
+const PUSH_FORCE = 0.75;
+const PUSH_RANGE_MULT = 1.8;
 
 // ── GroupedDots — `b` groups of `a` dots.
 function GroupedDots({ a, b }) {
@@ -64,10 +76,10 @@ function GroupedDots({ a, b }) {
     [rows, cols] = [cols, rows];
   }
   const total = rows * cols;
-  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 4.5 : 7;
+  const dotR = total > 80 ? 2.5 : total > 40 ? 3.25 : total > 16 ? 4 : 6;
   const inGap = dotR * 2 + 6;
   const colGap = inGap + 12;
-  const pad = dotR + 14;                       // extra room so edge dots never clip
+  const pad = dotR + 10;
   const W = (cols - 1) * colGap + inGap + pad * 2;
   const H = rows * inGap + pad * 2;
 
@@ -95,20 +107,26 @@ function GroupedDots({ a, b }) {
         const cx = pad + col * colGap + inGap / 2;
         const cy = pad + row * inGap + inGap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, inGap * PUSH_RANGE_MULT, PUSH_FORCE);
+        const drift = idleDrift(i);
         return (
           <motion.g
             key={i}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
-            transition={{
-              scale:   { delay: i * 0.012, duration: 0.18 },
-              opacity: { delay: i * 0.012, duration: 0.18 },
-              x:       { type: "spring", stiffness: 240, damping: 26 },
-              y:       { type: "spring", stiffness: 240, damping: 26 },
-            }}
-            style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
+            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
+            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
           >
-            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            <motion.g
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
+              transition={{
+                scale:   { delay: i * 0.012, duration: 0.18 },
+                opacity: { delay: i * 0.012, duration: 0.18 },
+                x:       { type: "spring", stiffness: 240, damping: 26 },
+                y:       { type: "spring", stiffness: 240, damping: 26 },
+              }}
+              style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
+            >
+              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            </motion.g>
           </motion.g>
         );
       })}
@@ -121,9 +139,9 @@ function DotGrid({ a, b }) {
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
-  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 4.5 : 7;
+  const dotR = total > 80 ? 2.5 : total > 40 ? 3.25 : total > 16 ? 4 : 6;
   const gap = dotR * 2 + 8;
-  const pad = dotR + 14;
+  const pad = dotR + 10;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   const svgRef = useRef(null);
@@ -149,20 +167,26 @@ function DotGrid({ a, b }) {
         const cx = pad + c * gap + gap / 2;
         const cy = pad + r * gap + gap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, gap * PUSH_RANGE_MULT, PUSH_FORCE);
+        const drift = idleDrift(i);
         return (
           <motion.g
             key={i}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
-            transition={{
-              scale:   { delay: i * 0.012, duration: 0.18 },
-              opacity: { delay: i * 0.012, duration: 0.18 },
-              x:       { type: "spring", stiffness: 240, damping: 26 },
-              y:       { type: "spring", stiffness: 240, damping: 26 },
-            }}
-            style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
+            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
+            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
           >
-            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            <motion.g
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
+              transition={{
+                scale:   { delay: i * 0.012, duration: 0.18 },
+                opacity: { delay: i * 0.012, duration: 0.18 },
+                x:       { type: "spring", stiffness: 240, damping: 26 },
+                y:       { type: "spring", stiffness: 240, damping: 26 },
+              }}
+              style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
+            >
+              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            </motion.g>
           </motion.g>
         );
       })}
@@ -241,23 +265,31 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
 function DivGroups({ dividend, divisor }) {
   const cols = divisor;
   const rows = Math.ceil(dividend / cols);
-  const dotR = dividend > 60 ? 4 : 5;
+  const dotR = dividend > 60 ? 3.25 : 4;
   const gap = dotR * 2 + 6;
-  const pad = dotR + 12;
+  const pad = dotR + 8;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
-      {Array.from({ length: dividend }).map((_, i) => (
-        <motion.circle
-          key={i}
-          cx={pad + (i % cols) * gap + gap / 2}
-          cy={pad + Math.floor(i / cols) * gap + gap / 2}
-          r={dotR} fill="#06b6d4"
-          initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: i * 0.015, duration: 0.18 }}
-        />
-      ))}
+      {Array.from({ length: dividend }).map((_, i) => {
+        const drift = idleDrift(i, 1.4);
+        return (
+          <motion.g
+            key={i}
+            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
+            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <motion.circle
+              cx={pad + (i % cols) * gap + gap / 2}
+              cy={pad + Math.floor(i / cols) * gap + gap / 2}
+              r={dotR} fill="#06b6d4"
+              initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: i * 0.015, duration: 0.18 }}
+            />
+          </motion.g>
+        );
+      })}
     </svg>
   );
 }
@@ -354,7 +386,7 @@ export default function LessonQuestion({ question, onAnswer }) {
 
       <div className="flex-1 min-h-0 grid place-items-center mb-2">
         <div
-          className="brut-border bg-zinc-900 dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-square max-h-[46vh] overflow-hidden"
+          className="brut-border bg-zinc-900 dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-[4/3] max-h-[38vh] overflow-hidden"
           data-testid="lesson-question-visual"
         >
           <div className="w-full h-full">{visual}</div>
