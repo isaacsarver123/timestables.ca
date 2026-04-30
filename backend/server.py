@@ -313,6 +313,16 @@ class SubscriptionCheckoutIn(BaseModel):
     family_slots: Optional[int] = FAMILY_INCLUDED_SLOTS
 
 
+def _subscription_plan_details(plan: Optional[str], family_slots: Optional[int]):
+    plan_kind = (plan or "individual").strip().lower()
+    slots = int(family_slots or FAMILY_INCLUDED_SLOTS)
+    if plan_kind == "family":
+        amount = _family_price_for_slots(slots)
+        product_name = "timestables.ca Family"
+        return "family", slots, amount, product_name
+    return "individual", 0, PRICE_CAD, "timestables.ca Premium"
+
+
 class FamilyInviteIn(BaseModel):
     invitee_user_id: str
 
@@ -666,16 +676,7 @@ async def stripe_checkout(payload: SubscriptionCheckoutIn, user: dict = Depends(
     await ensure_stripe()
     origin = (payload.origin or FRONTEND_URL).rstrip("/")
     customer_id = await _ensure_stripe_customer(user)
-    plan = (payload.plan or "individual").strip().lower()
-    family_slots = int(payload.family_slots or FAMILY_INCLUDED_SLOTS)
-    if plan == "family":
-        amount = _family_price_for_slots(family_slots)
-        product_name = "timestables.ca Family"
-    else:
-        plan = "individual"
-        family_slots = 0
-        amount = PRICE_CAD
-        product_name = "timestables.ca Premium"
+    plan, family_slots, amount, product_name = _subscription_plan_details(payload.plan, payload.family_slots)
     metadata = {
         "user_id": str(user["_id"]),
         "plan_kind": plan,
@@ -718,6 +719,59 @@ async def stripe_checkout(payload: SubscriptionCheckoutIn, user: dict = Depends(
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"url": session.url, "session_id": session.id}
+
+
+@api.post("/stripe/change-plan")
+async def stripe_change_plan(payload: SubscriptionCheckoutIn, user: dict = Depends(get_token_user)):
+    await ensure_stripe()
+    sub = user.get("subscription") or {}
+    subscription_id = sub.get("subscription_id")
+    customer_id = sub.get("customer_id") or await _ensure_stripe_customer(user)
+    if not subscription_id:
+        raise HTTPException(status_code=400, detail="No active subscription found to update.")
+
+    plan, family_slots, amount, product_name = _subscription_plan_details(payload.plan, payload.family_slots)
+    metadata = {
+        "user_id": str(user["_id"]),
+        "plan_kind": plan,
+        "family_slots": str(family_slots),
+    }
+
+    try:
+        current = stripe.Subscription.retrieve(subscription_id, expand=["items.data.price"])
+        current_items = (getattr(getattr(current, "items", None), "data", None) or [])
+        if not current_items:
+            raise HTTPException(status_code=400, detail="Subscription has no billable items to update.")
+
+        new_price = stripe.Price.create(
+            currency="cad",
+            unit_amount=int(round(amount * 100)),
+            recurring={"interval": "month"},
+            product_data={"name": product_name},
+            metadata=metadata,
+        )
+        stripe.Subscription.modify(
+            subscription_id,
+            items=[{
+                "id": current_items[0].id,
+                "price": new_price.id,
+                "quantity": 1,
+            }],
+            metadata=metadata,
+            cancel_at_period_end=False,
+            proration_behavior="create_prorations",
+        )
+    except stripe.error.StripeError as e:
+        log.error("Stripe plan change failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)[:160]}")
+
+    await _sync_subscription_from_stripe(str(user["_id"]), customer_id)
+    return {
+        "ok": True,
+        "plan_kind": plan,
+        "family_slots": family_slots,
+        "amount": amount,
+    }
 
 
 async def _credit_gem_pack_if_needed(session_id: str) -> int:

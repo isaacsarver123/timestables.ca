@@ -18,7 +18,6 @@ import {
   ShieldCheck,
   Infinity as InfinityIcon,
   Users,
-  UserPlus,
 } from "lucide-react";
 import {
   getState,
@@ -37,7 +36,7 @@ import CardOnFile from "@/components/CardOnFile";
 const Settings = () => {
   const [state, setState] = useState(getState());
   useEffect(() => subscribe(() => setState(getState())), []);
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const nav = useNavigate();
   const [cms, setCms] = useState(null);
   useEffect(() => {
@@ -77,6 +76,23 @@ const Settings = () => {
       window.location.href = data.url;
     } catch (ex) {
       toast.error(formatErr(ex.response?.data?.detail) || "Could not open billing portal");
+    }
+  };
+
+  const changePlan = async (plan = "family", familySlots = 6) => {
+    try {
+      const { data } = await api.post("/stripe/change-plan", {
+        plan,
+        family_slots: familySlots,
+      });
+      await refresh();
+      toast.success(
+        data?.plan_kind === "family"
+          ? `Switched to Max Family${data?.family_slots ? ` (${data.family_slots} seats)` : ""}`
+          : "Subscription updated"
+      );
+    } catch (ex) {
+      toast.error(formatErr(ex.response?.data?.detail) || "Could not update subscription");
     }
   };
 
@@ -148,6 +164,7 @@ const Settings = () => {
           <BillingPanel
             user={user}
             onSubscribe={startCheckout}
+            onChangePlan={changePlan}
             onPortal={openPortal}
           />
           {user?.billing?.plan_kind === "family" && ["active", "trialing", "past_due"].includes(user?.subscription_status) && (
@@ -261,24 +278,79 @@ const Settings = () => {
   );
 };
 
-const BillingPanel = ({ user, onSubscribe, onPortal }) => {
+const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
   const sub = user.billing || {};
   const status = user.subscription_status;
   const active = ["active", "trialing", "past_due"].includes(status);
+  const isFamily = sub.plan_kind === "family";
+  const isIndividual = sub.plan_kind !== "family";
   const [familySlots, setFamilySlots] = useState(Math.max(6, Number(sub.family_slots) || 6));
   const [family, setFamily] = useState(null);
+  const [showSeatPicker, setShowSeatPicker] = useState(false);
+  const [familyBusy, setFamilyBusy] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     api.get("/family/me").then(({ data }) => setFamily(data?.family || null)).catch(() => setFamily(null));
   }, [user, sub.plan_kind, sub.family_slots]);
 
+  useEffect(() => {
+    if (isFamily && (sub.family_slots || family?.max_slots)) {
+      setFamilySlots(Math.max(6, Number(sub.family_slots || family?.max_slots) || 6));
+    }
+  }, [isFamily, sub.family_slots, family?.max_slots]);
+
   const niceDate = (iso) => {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
     catch { return iso; }
   };
+
   const familyPrice = 15 + Math.max(0, familySlots - 6) * 5;
+  const isUpgrade = active && isIndividual;
+
+  const handleFamilyAction = async () => {
+    setFamilyBusy(true);
+    try {
+      if (isUpgrade) await onChangePlan("family", familySlots);
+      else await onSubscribe("family", familySlots);
+    } finally {
+      setFamilyBusy(false);
+    }
+  };
+
+  const FamilyOfferCard = ({ buttonLabel, testid }) => (
+    <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid={testid}>
+      <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> Family</div>
+      <div className="text-xs text-muted">$15/month includes 6 total seats, then +$5 per extra seat up to 10.</div>
+      <button
+        onClick={handleFamilyAction}
+        disabled={familyBusy}
+        data-testid={`${testid}-primary`}
+        className="w-full brut-border bg-blue-600 text-white px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        <CreditCard size={13} /> {familyBusy ? "Working…" : `${buttonLabel} — $${familyPrice} CAD/mo`}
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowSeatPicker((v) => !v)}
+        data-testid={`${testid}-toggle-seats`}
+        className="text-xs font-bold text-fg underline underline-offset-2 hover:text-blue-600"
+      >
+        {showSeatPicker ? "Hide seat picker" : "Need more seats?"}
+      </button>
+      {showSeatPicker && (
+        <div className="space-y-2 pt-1">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Seats</div>
+          <div className="flex items-center gap-2">
+            <input type="range" min="6" max="10" step="1" value={familySlots} onChange={(e) => setFamilySlots(Number(e.target.value))} className="flex-1" />
+            <div className="w-16 text-right font-bold text-fg">{familySlots}</div>
+          </div>
+          <div className="text-[11px] text-muted">{familySlots} total seats, ${familyPrice} CAD/month.</div>
+        </div>
+      )}
+    </div>
+  );
 
   if (user.is_admin) {
     return (
@@ -304,19 +376,29 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
         <div className="flex items-center gap-2">
           <CheckCircle2 size={16} className="text-emerald-500" />
           <span className="font-bold text-fg text-sm">
-            {sub.plan_kind === "family" ? "Family" : "Subscribed"} · ${Number(sub.amount_cad || 5).toFixed(2)} CAD / {sub.interval}
+            {isFamily ? "Family" : "Subscribed"} · ${Number(sub.amount_cad || 5).toFixed(2)} CAD / {sub.interval}
           </span>
         </div>
-        <Tile label="Plan" value={sub.plan_kind === "family" ? "Family" : "Individual"} testid="billing-plan-kind" />
-        {sub.plan_kind === "family" && (
+        <Tile label="Plan" value={isFamily ? "Max Family" : "Max Individual"} testid="billing-plan-kind" />
+        {isFamily && (
           <Tile label="Seats" value={`${sub.family_slots || family?.max_slots || 6} total`} sub="Owner included" testid="billing-family-slots" />
         )}
         <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
         <CardOnFile brand={sub.brand} last4={sub.last4} testid="billing-card" />
-        {sub.plan_kind === "family" && family && (
+        {isFamily && family && (
           <div className="brut-border-soft surface-2 p-3 space-y-2" data-testid="family-members-summary">
             <div className="flex items-center gap-2 font-bold text-fg text-sm"><Users size={14} /> Family members</div>
             <div className="text-xs text-muted">{family.members?.length || 1} joined, {family.pending_invites?.filter((x) => x.status === "pending").length || 0} pending, {family.max_slots || 6} total slots.</div>
+          </div>
+        )}
+        {isUpgrade && (
+          <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid="billing-upgrade-family">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1">Current plan</div>
+              <div className="font-bold text-fg">Max Individual</div>
+              <div className="text-xs text-muted mt-1">Need more? Switch to Max Family anytime.</div>
+            </div>
+            <FamilyOfferCard buttonLabel="Switch to Max Family" testid="billing-switch-family" />
           </div>
         )}
         <p className="text-[11px] text-muted leading-relaxed" data-testid="billing-charge-line">
@@ -365,24 +447,7 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
             <CreditCard size={13} /> Subscribe — $5 CAD/mo
           </button>
         </div>
-        <div className="brut-border-soft surface-2 p-4 space-y-3">
-          <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> Family</div>
-          <div className="text-xs text-muted">$15/month includes 6 total seats, then +$5 per extra seat up to 10.</div>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1">Seats</div>
-            <div className="flex items-center gap-2">
-              <input type="range" min="6" max="10" step="1" value={familySlots} onChange={(e) => setFamilySlots(Number(e.target.value))} className="flex-1" />
-              <div className="w-16 text-right font-bold text-fg">{familySlots}</div>
-            </div>
-          </div>
-          <button
-            onClick={() => onSubscribe("family", familySlots)}
-            data-testid="billing-subscribe-family"
-            className="w-full brut-border bg-blue-600 text-white px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-700 flex items-center justify-center gap-2"
-          >
-            <UserPlus size={13} /> Start family — ${familyPrice} CAD/mo
-          </button>
-        </div>
+        <FamilyOfferCard buttonLabel="Subscribe" testid="billing-subscribe-family" />
       </div>
     </div>
   );
