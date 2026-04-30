@@ -324,7 +324,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
     }
   };
 
-  const FamilyOfferCard = ({ buttonLabel, testid }) => (
+  const renderFamilyOfferCard = (buttonLabel, testid) => (
     <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid={testid}>
       <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> TimesTables, MAX Family</div>
       <div className="text-xs text-muted">$15/month includes 5 total seats, then +$5 per extra seat up to 10.</div>
@@ -417,7 +417,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
               <div className="font-bold text-fg">TimesTables</div>
               <div className="text-xs text-muted mt-1">Need more? Switch to TimesTables, MAX Family anytime.</div>
             </div>
-            <FamilyOfferCard buttonLabel="Switch to TimesTables, MAX Family" testid="billing-switch-family" />
+            {renderFamilyOfferCard("Switch to TimesTables, MAX Family", "billing-switch-family")}
           </div>
         )}
         <p className="text-[11px] text-muted leading-relaxed" data-testid="billing-charge-line">
@@ -466,7 +466,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
             <CreditCard size={13} /> Subscribe — $5 CAD/mo
           </button>
         </div>
-        <FamilyOfferCard buttonLabel="Subscribe" testid="billing-subscribe-family" />
+        {renderFamilyOfferCard("Subscribe", "billing-subscribe-family")}
       </div>
     </div>
   );
