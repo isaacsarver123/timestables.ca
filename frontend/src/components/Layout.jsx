@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   Coins,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/storage";
 import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
+import { requestGuardedNav } from "@/lib/leaveGuard";
 import TrialBanner from "@/components/TrialBanner";
 import { loadCms, subscribeCms, getCmsCached } from "@/lib/cms";
 
@@ -47,6 +48,7 @@ function formatCount(n) {
 export const Layout = ({ children }) => {
   const [state, setState] = useState(getState());
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [footerText, setFooterText] = useState(
     () => (getCmsCached()?.footer_text || "timestables.ca · v5")
@@ -117,6 +119,12 @@ export const Layout = ({ children }) => {
                   <Link
                     key={item.to}
                     to={item.to}
+                    onClick={(e) => {
+                      // If a lesson-nav guard is armed, let the active page
+                      // intercept and show its confirmation modal.
+                      e.preventDefault();
+                      requestGuardedNav(item.to, () => navigate(item.to));
+                    }}
                     data-testid={item.testid}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md font-medium text-sm transition-colors ${
                       active

@@ -58,4 +58,17 @@ export const sfx = {
   tick() {
     tone(880, 0.04, "square", 0.02);
   },
+  // Fanfare — "da-da-da-DAAAA" trumpet run played on lesson completion.
+  // Uses the brassier "sawtooth" wave with a slight warble for flavour.
+  fanfare() {
+    // Short triplet lead-in, then a held triumphant major chord-ish stack.
+    tone(523.25, 0.12, "sawtooth", 0.055, 0.00);   // C5
+    tone(659.25, 0.12, "sawtooth", 0.055, 0.12);   // E5
+    tone(783.99, 0.12, "sawtooth", 0.055, 0.24);   // G5
+    // Sustained final blast — C, E, G together (major triad) + octave up.
+    tone(523.25, 0.65, "sawtooth", 0.05,  0.40);   // C5 held
+    tone(659.25, 0.65, "sawtooth", 0.045, 0.42);   // E5 held
+    tone(783.99, 0.65, "sawtooth", 0.045, 0.44);   // G5 held
+    tone(1046.5, 0.70, "triangle", 0.04,  0.46);   // C6 shimmer
+  },
 };

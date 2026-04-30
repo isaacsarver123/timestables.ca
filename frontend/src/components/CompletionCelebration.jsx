@@ -14,17 +14,28 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Zap, Gem } from "lucide-react";
 import { sfx } from "@/lib/sound";
 
-function useCountUp(target, durationMs = 900, start = 0, runKey = 0) {
+function useCountUp(target, durationMs = 900, start = 0, runKey = 0, onTick) {
   const [v, setV] = useState(start);
   useEffect(() => {
     if (target === start) { setV(start); return; }
     let raf = 0;
+    let lastBucket = -1;
     const t0 = performance.now();
     const step = (now) => {
       const p = Math.min(1, (now - t0) / durationMs);
       // Ease-out cubic
       const eased = 1 - Math.pow(1 - p, 3);
-      setV(Math.round(start + (target - start) * eased));
+      const cur = Math.round(start + (target - start) * eased);
+      setV(cur);
+      // Fire onTick 6-8 times total across the count-up for a rising
+      // pattern of little "chimes".
+      if (onTick) {
+        const bucket = Math.floor(p * 7);
+        if (bucket !== lastBucket) {
+          lastBucket = bucket;
+          onTick(p);
+        }
+      }
       if (p < 1) raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
@@ -35,12 +46,19 @@ function useCountUp(target, durationMs = 900, start = 0, runKey = 0) {
 }
 
 export default function CompletionCelebration({ xp = 0, streakInfo = null, gems = 0 }) {
-  const xpVal = useCountUp(xp, 950, 0, 1);
+  // Slow count-up + rising tick pattern for the drama of the final screen.
+  const onTick = () => { try { sfx.tick?.(); } catch (_) {} };
+  const xpVal = useCountUp(xp, 2400, 0, 1, onTick);
   const showStreak = !!streakInfo?.wasFirst;
   const showGems = !!streakInfo?.gemsAwarded || gems > 0;
   const streakReward = streakInfo?.gemsAwarded || 0;
   const totalGems = (gems || 0) + streakReward;
   const [streakLit, setStreakLit] = useState(false);
+
+  // Fire trumpet fanfare when the celebration mounts.
+  useEffect(() => {
+    try { sfx.fanfare?.(); } catch (_) {}
+  }, []);
 
   // Fire SFX when the streak lights up.
   useEffect(() => {

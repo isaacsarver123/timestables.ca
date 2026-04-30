@@ -151,6 +151,8 @@ export default function Lessons() {
   const [status, setStatus] = useState("idle");
   const [correct, setCorrect] = useState(0);
   const [hardCorrect, setHardCorrect] = useState(0);
+  // Per-challenge-question result: true = correct, false = wrong, undefined = unanswered
+  const [hardResults, setHardResults] = useState([]);
   const [hearts, setHearts] = useState(TEST_HEARTS);
   const [explanation, setExplanation] = useState(null);
   const [result, setResult] = useState(null);
@@ -192,6 +194,25 @@ export default function Lessons() {
 
   const pathDoneCount = flatPath.filter((l) => isLessonCompleted(l.id)).length;
   const allDone = pathDoneCount >= flatPath.length;
+
+  // Auto-scroll to the current (next-up) lesson when the lobby loads so the
+  // user never starts on "the top of the page" at Level 1 after they've
+  // already progressed past it.
+  useEffect(() => {
+    if (phase !== "lobby") return;
+    // Find first unlocked+uncompleted lesson in the flat path.
+    const next = flatPath.find((l) => isLessonUnlocked(l.id) && !isLessonCompleted(l.id));
+    if (!next) return;
+    // Wait a tick for the path to render.
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-testid="lesson-path-node-${next.id}"]`);
+      if (el && typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pathDoneCount]);
 
   // ── topic chips ───────────────────────────────────────────────────────────
   const toggleTopic = (key) => {
@@ -282,6 +303,7 @@ export default function Lessons() {
       setStatus("idle");
       setCorrect(0);
       setHardCorrect(0);
+      setHardResults([]);
       setHearts(TEST_HEARTS);
       setExplanation(null);
       setPhase("test");
@@ -295,6 +317,7 @@ export default function Lessons() {
     setStatus("idle");
     setCorrect(0);
     setHardCorrect(0);
+    setHardResults([]);
     setExplanation(null);
   }
 
@@ -321,6 +344,9 @@ export default function Lessons() {
     if (playSfx) { sfx.correct(); sfx.coin(); }
     setCorrect((c) => c + 1);
     if (q.isHard) setHardCorrect((c) => c + 1);
+    if (phase !== "test" && idx >= BASE_QUESTIONS) {
+      setHardResults((arr) => [...arr, true]);
+    }
     addCoinsAndXp(1, 3);
     recordAnswer({ a: q.a, b: q.b, op: q.op, correct: true, ms: 0 });
     advance();
@@ -341,6 +367,7 @@ export default function Lessons() {
         return nh;
       });
     } else {
+      if (idx >= BASE_QUESTIONS) setHardResults((arr) => [...arr, false]);
       setExplanation(explain(q));
       setStatus("reviewing");
     }
@@ -503,18 +530,25 @@ export default function Lessons() {
               transition={{ duration: 0.3 }}
             />
           </div>
-          {/* Challenge dots — little emerald rectangles matching the bar style.
-              Each one fills green when its corresponding challenge question is
-              answered correctly. */}
+          {/* Challenge dots — little rectangles matching the bar style.
+              Green when answered correctly, red when answered wrong, blank
+              until the question comes up. */}
           <div className="flex items-center gap-1" data-testid="lesson-hard-dots">
-            {Array.from({ length: HARD_DOTS }).map((_, i) => (
-              <div
-                key={i}
-                className={`w-3 h-3 brut-border ${
-                  hardCorrect > i ? "bg-emerald-500" : "surface-2"
-                }`}
-              />
-            ))}
+            {Array.from({ length: HARD_DOTS }).map((_, i) => {
+              const r = hardResults[i];
+              const cls = r === true
+                ? "bg-emerald-500"
+                : r === false
+                ? "bg-rose-500"
+                : "surface-2";
+              return (
+                <div
+                  key={i}
+                  data-testid={`lesson-hard-dot-${i}`}
+                  className={`w-3 h-3 brut-border ${cls}`}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -1020,13 +1054,17 @@ function LessonPath({
 function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
   const [open, setOpen] = useState(false);
 
-  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border grid place-items-center font-black text-2xl transition-all ${
+  // Shadow lives only on COMPLETED lessons — it reads as a "credited" mark.
+  // Next-up and locked nodes stay flat so the user's eye doesn't get pulled
+  // everywhere.
+  const shadowClass = done ? "brut-shadow-sm" : "";
+  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border ${shadowClass} grid place-items-center font-black text-2xl transition-all ${
     done
       ? `${unit.accent} text-zinc-950 hover:-translate-y-0.5`
       : unlocked
       ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
       : "surface-2 text-muted hover:-translate-y-0.5"
-  } ${lesson.boss ? "rounded-md brut-shadow-sm" : "rounded-full"}`;
+  } ${lesson.boss ? "rounded-md" : "rounded-full"}`;
 
   const innerIcon = done ? (
     <CheckCircle2 size={26} strokeWidth={3} />

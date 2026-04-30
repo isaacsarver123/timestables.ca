@@ -1,32 +1,65 @@
 import { useEffect, useState, useCallback } from "react";
-import { useBlocker, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 /**
- * useNavGuard
+ * Global "nav guard" for in-lesson navigation.
  * ------------------------------------------------------------------
- * Blocks ANY React Router navigation (Link click, programmatic navigate,
- * back/forward) while `armed` is true. Returns the state the caller
- * needs to drive a confirmation modal.
+ * While a lesson is in play, we want the confirmation modal to pop
+ * for ANY nav — in-page Quit button AND top-nav Link clicks.
  *
+ * Implementation: a module-level `_armed` boolean + a listener set.
+ * Top-nav Link clicks call `requestGuardedNav(path, doNav)`; if armed,
+ * the listeners (the active Lessons page) handle the modal and decide
+ * whether to call `doNav()`.
+ *
+ * Also wires `beforeunload` so tab-close / reload prompts the browser
+ * "Changes you made may not be saved" dialog.
+ */
+
+let _armed = false;
+const _listeners = new Set();
+
+export const isNavGuardArmed = () => _armed;
+
+export const requestGuardedNav = (path, doNav) => {
+  if (!_armed || _listeners.size === 0) {
+    doNav();
+    return;
+  }
+  // Fire at the first listener (there's only ever one active at a time).
+  const iter = _listeners.values();
+  const cb = iter.next().value;
+  cb(path, doNav);
+};
+
+/**
  *   const guard = useNavGuard(running);
  *   <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
- *
- * Existing in-page "Quit" buttons can still use `guard.tryGo(path)` — it
- * falls through to the router-level blocker, which pops the same modal.
- * Also wires `beforeunload` so closing the tab / reload prompts.
+ *   <button onClick={() => guard.tryGo('/')}>Quit</button>
  */
 export const useNavGuard = (armed) => {
   const navigate = useNavigate();
-  const [manualPending, setManualPending] = useState(null);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(null); // { doNav } | { path }
 
-  // Router-level blocker: intercepts any nav while `armed` is true.
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
-    if (!armed) return false;
-    // Don't block internal replaces to the same path.
-    return currentLocation.pathname !== nextLocation.pathname;
-  });
+  // Subscribe to nav requests while armed.
+  useEffect(() => {
+    _armed = !!armed;
+    if (!armed) {
+      return () => {};
+    }
+    const cb = (path, doNav) => {
+      setPending({ doNav });
+      setOpen(true);
+    };
+    _listeners.add(cb);
+    return () => {
+      _listeners.delete(cb);
+      _armed = false;
+    };
+  }, [armed]);
 
+  // Also prompt for tab-close / reload.
   useEffect(() => {
     if (!armed) return;
     const handler = (e) => {
@@ -37,40 +70,32 @@ export const useNavGuard = (armed) => {
     return () => window.removeEventListener("beforeunload", handler);
   }, [armed]);
 
-  // Explicit "Quit" buttons inside the page keep using this. When `armed`
-  // is true, let the router blocker handle the modal — call navigate() and
-  // the blocker will intercept it.
   const tryGo = useCallback(
     (path) => {
       if (!armed) {
         navigate(path);
         return;
       }
-      setManualPending(path);
-      setManualOpen(true);
+      setPending({ path });
+      setOpen(true);
     },
     [armed, navigate]
   );
 
-  // Unified modal state — open if either the blocker tripped or tryGo fired.
-  const open = blocker.state === "blocked" || manualOpen;
-
   const cancel = useCallback(() => {
-    if (blocker.state === "blocked") blocker.reset();
-    setManualOpen(false);
-    setManualPending(null);
-  }, [blocker]);
+    setOpen(false);
+    setPending(null);
+  }, []);
 
   const confirm = useCallback(() => {
-    if (blocker.state === "blocked") {
-      blocker.proceed();
-    } else if (manualPending) {
-      setManualOpen(false);
-      const p = manualPending;
-      setManualPending(null);
-      navigate(p);
+    setOpen(false);
+    if (pending?.doNav) {
+      pending.doNav();
+    } else if (pending?.path) {
+      navigate(pending.path);
     }
-  }, [blocker, manualPending, navigate]);
+    setPending(null);
+  }, [pending, navigate]);
 
   return { open, tryGo, cancel, confirm };
 };
