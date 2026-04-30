@@ -54,7 +54,7 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-function idleDrift(i, amp = 1.8) {
+function idleDrift(i, amp = 0.6) {
   const angleA = ((i * 47) % 360) * (Math.PI / 180);
   const angleB = angleA + 1.9;
   return {
@@ -273,7 +273,7 @@ function DivGroups({ dividend, divisor }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
       {Array.from({ length: dividend }).map((_, i) => {
-        const drift = idleDrift(i, 1.4);
+        const drift = idleDrift(i, 0.45);
         return (
           <motion.g
             key={i}
