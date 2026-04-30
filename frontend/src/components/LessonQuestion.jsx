@@ -71,7 +71,7 @@ const PUSH_FORCE = 0.75;
 const PUSH_RANGE_MULT = 1.8;
 
 // ── GroupedDots — `b` groups of `a` dots.
-function GroupedDots({ a, b, motion }) {
+function GroupedDots({ a, b, motionSettings }) {
   let rows = a, cols = b;
   if (rows > cols * 1.6) {
     [rows, cols] = [cols, rows];
@@ -107,8 +107,8 @@ function GroupedDots({ a, b, motion }) {
         const row = i % rows;
         const cx = pad + col * colGap + inGap / 2;
         const cy = pad + row * inGap + inGap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motion?.mouseRadius ?? PUSH_RANGE_MULT), motion?.mouseForce ?? PUSH_FORCE);
-        const drift = idleDrift(i, motion?.driftAmount ?? 1.0);
+        const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
+        const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
           <motion.g
             key={i}
@@ -136,7 +136,7 @@ function GroupedDots({ a, b, motion }) {
 }
 
 // ── DotGrid — flat `rows × cols` grid
-function DotGrid({ a, b, motion }) {
+function DotGrid({ a, b, motionSettings }) {
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
@@ -167,8 +167,8 @@ function DotGrid({ a, b, motion }) {
         const c = i % cols;
         const cx = pad + c * gap + gap / 2;
         const cy = pad + r * gap + gap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, gap * (motion?.mouseRadius ?? PUSH_RANGE_MULT), motion?.mouseForce ?? PUSH_FORCE);
-        const drift = idleDrift(i, motion?.driftAmount ?? 1.0);
+        const { dx, dy } = repulsion(cx, cy, pointer, gap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
+        const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
           <motion.g
             key={i}
@@ -263,7 +263,7 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
   );
 }
 
-function DivGroups({ dividend, divisor, motion }) {
+function DivGroups({ dividend, divisor, motionSettings }) {
   const cols = divisor;
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 3.25 : 4;
@@ -274,7 +274,7 @@ function DivGroups({ dividend, divisor, motion }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
       {Array.from({ length: dividend }).map((_, i) => {
-        const drift = idleDrift(i, (motion?.driftAmount ?? 1.0) * 0.75);
+        const drift = idleDrift(i, (motionSettings?.driftAmount ?? 1.0) * 0.75);
         return (
           <motion.g
             key={i}
@@ -371,14 +371,14 @@ export default function LessonQuestion({ question, onAnswer }) {
   };
 
   let visual;
-  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} motion={motion} />;
-  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} motion={motion} />;
+  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} motionSettings={motion} />;
+  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} motionSettings={motion} />;
   else if (kind === "numberLine") visual = (
     <DraggableNumberLine dividend={question.a} divisor={question.b}
       locked={committed}
       onPick={(v) => { if (!committed) { setSelected(v); } }} />
   );
-  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} motion={motion} />;
+  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} motionSettings={motion} />;
   else visual = <BigNumber a={question.a} b={question.b} symbol={question.op} />;
 
   // Slot colour: neutral while selecting, green/rose once committed.
