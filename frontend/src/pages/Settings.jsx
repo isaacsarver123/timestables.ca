@@ -32,10 +32,9 @@ import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
 import { api, formatErr } from "@/lib/api";
 import CardOnFile from "@/components/CardOnFile";
-import { Slider } from "@/components/ui/slider";
 
 const FAMILY_MIN_SLOTS = 2;
-const FAMILY_INCLUDED_SLOTS = 6;
+const FAMILY_INCLUDED_SLOTS = 5;
 const FAMILY_MAX_SLOTS = 10;
 const clampFamilySlots = (value) => Math.min(FAMILY_MAX_SLOTS, Math.max(FAMILY_MIN_SLOTS, Number(value) || FAMILY_INCLUDED_SLOTS));
 
@@ -63,7 +62,7 @@ const Settings = () => {
     }
   };
 
-  const startCheckout = async (plan = "individual", familySlots = 6) => {
+  const startCheckout = async (plan = "individual", familySlots = FAMILY_INCLUDED_SLOTS) => {
     try {
       const { data } = await api.post("/stripe/checkout", {
         origin: window.location.origin,
@@ -85,7 +84,7 @@ const Settings = () => {
     }
   };
 
-  const changePlan = async (plan = "family", familySlots = 6) => {
+  const changePlan = async (plan = "family", familySlots = FAMILY_INCLUDED_SLOTS) => {
     try {
       const { data } = await api.post("/stripe/change-plan", {
         plan,
@@ -312,7 +311,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
     catch { return iso; }
   };
 
-  const familyPrice = 15 + Math.max(0, familySlots - 6) * 5;
+  const familyPrice = 15 + Math.max(0, familySlots - FAMILY_INCLUDED_SLOTS) * 5;
   const isUpgrade = active && isIndividual;
 
   const handleFamilyAction = async () => {
@@ -328,7 +327,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
   const FamilyOfferCard = ({ buttonLabel, testid }) => (
     <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid={testid}>
       <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> TimesTables, MAX Family</div>
-      <div className="text-xs text-muted">$15/month includes up to 6 total seats, then +$5 per extra seat up to 10.</div>
+      <div className="text-xs text-muted">$15/month includes 5 total seats, then +$5 per extra seat up to 10.</div>
       <button
         onClick={handleFamilyAction}
         disabled={familyBusy}
@@ -351,13 +350,16 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
             <span>Seats</span>
             <span>{familySlots}</span>
           </div>
-          <Slider
-            value={[familySlots]}
+          <input
+            type="range"
             min={FAMILY_MIN_SLOTS}
             max={FAMILY_MAX_SLOTS}
             step={1}
-            onValueChange={(value) => setFamilySlots(clampFamilySlots(value?.[0]))}
+            value={familySlots}
+            onInput={(e) => setFamilySlots(clampFamilySlots(e.target.value))}
+            onChange={(e) => setFamilySlots(clampFamilySlots(e.target.value))}
             aria-label="Family seats"
+            className="w-full h-8 cursor-pointer accent-blue-600"
           />
           <div className="flex items-center justify-between gap-3 text-[11px] text-muted">
             <span>{FAMILY_MIN_SLOTS} seats min</span>
@@ -398,14 +400,14 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
         </div>
         <Tile label="Plan" value={isFamily ? "TimesTables, MAX Family" : "TimesTables"} testid="billing-plan-kind" />
         {isFamily && (
-          <Tile label="Seats" value={`${sub.family_slots || family?.max_slots || 6} total`} sub="Owner included" testid="billing-family-slots" />
+          <Tile label="Seats" value={`${sub.family_slots || family?.max_slots || FAMILY_INCLUDED_SLOTS} total`} sub="Owner included" testid="billing-family-slots" />
         )}
         <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
         <CardOnFile brand={sub.brand} last4={sub.last4} testid="billing-card" />
         {isFamily && family && (
           <div className="brut-border-soft surface-2 p-3 space-y-2" data-testid="family-members-summary">
             <div className="flex items-center gap-2 font-bold text-fg text-sm"><Users size={14} /> Family members</div>
-            <div className="text-xs text-muted">{family.members?.length || 1} joined, {family.pending_invites?.filter((x) => x.status === "pending").length || 0} pending, {family.max_slots || 6} total slots.</div>
+            <div className="text-xs text-muted">{family.members?.length || 1} joined, {family.pending_invites?.filter((x) => x.status === "pending").length || 0} pending, {family.max_slots || FAMILY_INCLUDED_SLOTS} total slots.</div>
           </div>
         )}
         {isUpgrade && (
