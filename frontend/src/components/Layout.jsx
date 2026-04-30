@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   GraduationCap,
   Gem,
+  Zap,
 } from "lucide-react";
 import {
   getState,
@@ -43,6 +44,42 @@ function formatCount(n) {
   if (v < 1_000_000) return `${Math.floor(v / 1000)}k`;
   if (v < 10_000_000) return `${(v / 1_000_000).toFixed(1)}m`;
   return `${Math.floor(v / 1_000_000)}m`;
+}
+
+// XP Boost HUD pill — only rendered while a boost is active. Shows "2× MM:SS"
+// with a live countdown that ticks every second and hides itself on expiry.
+function XpBoostPill({ boostUntil, active }) {
+  const [secs, setSecs] = useState(() => {
+    if (!boostUntil) return 0;
+    const ms = new Date(boostUntil).getTime() - Date.now();
+    return Math.max(0, Math.floor(ms / 1000));
+  });
+  useEffect(() => {
+    if (!boostUntil) { setSecs(0); return; }
+    const compute = () => {
+      const ms = new Date(boostUntil).getTime() - Date.now();
+      setSecs(Math.max(0, Math.floor(ms / 1000)));
+    };
+    compute();
+    const id = setInterval(compute, 1000);
+    return () => clearInterval(id);
+  }, [boostUntil]);
+  if (!active || secs <= 0) return null;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  const txt = `2× ${m}:${String(s).padStart(2, "0")}`;
+  return (
+    <Link
+      to="/shop"
+      data-testid="hud-xp-boost"
+      title={`XP Boost active — ${txt}`}
+      aria-label="XP Boost active"
+      className="flex items-center gap-1 px-1.5 py-1 brut-border bg-violet-500 text-white hover:-translate-y-px transition-all"
+    >
+      <Zap size={12} className="shrink-0" />
+      <span className="font-mono text-[11px] tabular-nums font-semibold">{txt}</span>
+    </Link>
+  );
 }
 
 export const Layout = ({ children }) => {
@@ -199,6 +236,7 @@ export const Layout = ({ children }) => {
                     {formatCount(user?.gems ?? 0)}
                   </span>
                 </Link>
+                <XpBoostPill boostUntil={user?.xp_boost_until} active={user?.xp_boost_active} />
                 <Link
                   to="/settings"
                   data-testid="hud-user"

@@ -27,7 +27,22 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5.7 — Lesson flow overhaul + Learn polish + global nav-guard (this round)
+### v5.8 — Shop: XP Boost + Streak Freeze + Stripe Gem Packs (this round)
+- **User schema extended** with `xp_boost_until` (ISO datetime) and `streak_freezes` (int, 0–2). Both surfaced in `serialize_user()` → `xp_boost_active`, `xp_boost_seconds_left`, `streak_freezes`.
+- **Shop endpoints** (`/api/shop/*`):
+  - `GET  /shop/catalog` — prices + user snapshot (gems, freezes, boost timer) for the UI.
+  - `POST /shop/buy-xp-boost` — 50 gems → +30 min; extends if already active. Atomic gem debit.
+  - `POST /shop/buy-streak-freeze` — 100 gems → +1, capped at 2. Atomic debit + increment.
+  - `POST /streak/use-freeze` — idempotent decrement the client calls when it detects a missed day.
+- **2× XP multiplier** applied in `/api/lessons/finish` when `xp_boost_until > now`. Returns `xp_boost_applied: true` for client-side confirmation.
+- **Stripe Gem Packs** — `POST /api/stripe/gems-checkout` creates a `mode=payment` Checkout session for pack_100 ($1.99 · 100 gems), pack_500 ($7.99 · 500 gems), or pack_1200 ($14.99 · 1,200 gems). Metadata `kind=gem_pack` routes the webhook + `/stripe/status/{id}` through `_credit_gem_pack_if_needed()` which atomically marks `gems_credited=true` and increments the user's gem balance (with a gem_transactions audit row). Webhook replay-safe.
+- **Frontend Shop (`Shop.jsx`)** now shows three sections: Meta boosts (XP Boost, Streak Freeze with active countdown + owned/cap), Gem packs (three Stripe tiles), and Per-run powerups (existing coin-priced tiles). Gem balance + coin balance both visible in the header.
+- **HUD XP Boost pill** in `Layout.jsx` — live-ticking `2× MM:SS` violet pill shown next to gems while a boost is active; hides automatically on expiry.
+- **Streak Freeze auto-consume** — `storage.js` `maybeUseStreakFreezeOnBoot()` runs after `initRemoteSync` hydration. If the recorded `lastDate` is exactly two days ago, calls `/streak/use-freeze`; on 200, patches local `lastDate` to yesterday so the streak survives.
+- **BillingResult** tells gem-pack purchases apart from subscription purchases and sends gem-pack buyers back to `/shop` with cyan styling.
+- **Pulse ring shrunk** — `-inset-1` + 1.08× scale (was -inset-2 + 1.18×) so the amber halo no longer overlaps the lesson label text.
+
+### v5.7 — Lesson flow overhaul + Learn polish + global nav-guard (prior round)
 - **Two-phase answer flow** (`LessonQuestion.jsx`): tap a tile → SELECT (blue outline, uncommitted), then tap CHECK → commit. Correct answers: emerald flash + ~900ms auto-advance. Wrong answers: red flash + parent's explanation card (`setStatus('reviewing')`). Critically, a correct answer NEVER flashes red first.
 - **End-of-lesson fanfare** — new `sfx.fanfare()` (Web-Audio brass triad run C5→E5→G5, then sustained C/E/G + C6 shimmer). Fires on `CompletionCelebration` mount. XP count-up slowed 950ms → **2400ms** with a `sfx.tick()` chime on each of ~7 buckets for rising drama.
 - **Red challenge dot on wrong** — `hardResults[]` array now tracks per-challenge outcome. Dot 0/1/2 is emerald on correct, `bg-rose-500` on wrong, `surface-2` before the question is reached.

@@ -106,6 +106,18 @@ def serialize_user(doc: dict) -> dict:
     # Admins always have access — they don't need to pay.
     has_access = role == "admin" or in_trial or sub_active
     secs_left = int((trial_end - now).total_seconds()) if trial_end and now < trial_end else 0
+    # XP boost
+    xpb_raw = doc.get("xp_boost_until")
+    xpb_dt = None
+    if isinstance(xpb_raw, str):
+        try:
+            xpb_dt = datetime.fromisoformat(xpb_raw)
+            if xpb_dt.tzinfo is None:
+                xpb_dt = xpb_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            xpb_dt = None
+    xp_boost_active = bool(xpb_dt and xpb_dt > now)
+    xp_boost_seconds_left = int((xpb_dt - now).total_seconds()) if xp_boost_active else 0
     return {
         "id": str(doc["_id"]),
         "email": doc["email"],
@@ -119,6 +131,10 @@ def serialize_user(doc: dict) -> dict:
         "is_admin": role == "admin",
         "subscription_status": sub_status,
         "gems": int(doc.get("gems") or 0),
+        "xp_boost_until": xpb_dt.isoformat() if xpb_dt else None,
+        "xp_boost_active": xp_boost_active,
+        "xp_boost_seconds_left": xp_boost_seconds_left,
+        "streak_freezes": int(doc.get("streak_freezes") or 0),
         "username": doc.get("username"),
         "bio": doc.get("bio") or "",
         "is_private": bool(doc.get("is_private", False)),
@@ -575,6 +591,37 @@ async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)
     return {"url": session.url, "session_id": session.id}
 
 
+async def _credit_gem_pack_if_needed(session_id: str) -> int:
+    """Atomically marks a gem-pack payment tx as credited and increments the
+    user's gem balance. Safe to call multiple times — second call is a no-op."""
+    tx = await db.payment_transactions.find_one_and_update(
+        {"session_id": session_id, "kind": "gem_pack",
+         "payment_status": "paid", "gems_credited": {"$ne": True}},
+        {"$set": {"gems_credited": True,
+                  "gems_credited_at": datetime.now(timezone.utc).isoformat()}},
+        return_document=True,
+    )
+    if not tx:
+        return 0
+    gems = int(tx.get("gems") or 0)
+    user_id = tx.get("user_id")
+    if gems <= 0 or not user_id:
+        return 0
+    try:
+        from bson import ObjectId
+        _id = ObjectId(user_id)
+    except Exception:
+        return 0
+    await db.users.update_one({"_id": _id}, {"$inc": {"gems": gems}})
+    await db.gem_transactions.insert_one({
+        "user_id": user_id,
+        "delta": gems,
+        "reason": f"gem_pack_{tx.get('pack_id') or 'unknown'}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return gems
+
+
 @api.get("/stripe/status/{session_id}")
 async def stripe_status(session_id: str, user: dict = Depends(get_token_user)):
     await ensure_stripe()
@@ -590,13 +637,20 @@ async def stripe_status(session_id: str, user: dict = Depends(get_token_user)):
             }},
         )
         user_id = (sess.metadata or {}).get("user_id") or str(user["_id"])
-        if sess.customer:
+        kind = (sess.metadata or {}).get("kind") or (tx.get("kind") if tx else None)
+        if kind == "gem_pack":
+            await _credit_gem_pack_if_needed(session_id)
+        elif sess.customer:
             await _sync_subscription_from_stripe(user_id, sess.customer)
+    elif tx and tx.get("kind") == "gem_pack" and sess.payment_status == "paid":
+        # Tx already marked paid (e.g. webhook beat us) — ensure credit is in.
+        await _credit_gem_pack_if_needed(session_id)
     return {
         "status": sess.status,
         "payment_status": sess.payment_status,
         "amount_total": sess.amount_total,
         "currency": sess.currency,
+        "kind": (sess.metadata or {}).get("kind") or (tx.get("kind") if tx else None),
     }
 
 
@@ -640,6 +694,28 @@ async def stripe_webhook(request: Request):
         u = await db.users.find_one({"subscription.customer_id": customer_id})
         if u:
             user_id = str(u["_id"])
+
+    # Gem-pack one-time checkout — credit gems on session completion.
+    if event["type"] == "checkout.session.completed":
+        session_id = obj.get("id")
+        kind = (obj.get("metadata") or {}).get("kind")
+        if session_id and (kind == "gem_pack" or
+                           (await db.payment_transactions.find_one(
+                               {"session_id": session_id, "kind": "gem_pack"}, {"_id": 0}))):
+            await db.payment_transactions.update_one(
+                {"session_id": session_id},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }},
+            )
+            try:
+                await _credit_gem_pack_if_needed(session_id)
+            except Exception as e:
+                log.error("gem credit failed: %s", e)
+            return {"received": True}
+
     if user_id and customer_id:
         try:
             await _sync_subscription_from_stripe(user_id, customer_id)
@@ -855,6 +931,19 @@ async def lessons_finish(payload: LessonFinishIn, user: dict = Depends(get_token
     xp_earned = _lesson_xp(payload)
     gems_earned = _lesson_gems(payload)
     now = datetime.now(timezone.utc)
+    # Apply XP Boost 2× if active at finish time.
+    xpb_raw = user.get("xp_boost_until")
+    xpb_dt = None
+    if isinstance(xpb_raw, str):
+        try:
+            xpb_dt = datetime.fromisoformat(xpb_raw)
+            if xpb_dt.tzinfo is None:
+                xpb_dt = xpb_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            xpb_dt = None
+    boost_active = bool(xpb_dt and xpb_dt > now)
+    if boost_active:
+        xp_earned *= 2
     await db.lesson_runs.insert_one({
         "user_id": str(user["_id"]),
         "topics": payload.topics,
@@ -865,6 +954,7 @@ async def lessons_finish(payload: LessonFinishIn, user: dict = Depends(get_token
         "seconds_taken": payload.seconds_taken,
         "xp_earned": xp_earned,
         "gems_earned": gems_earned,
+        "xp_boost_applied": boost_active,
         "created_at": now,
     })
     if gems_earned:
@@ -875,7 +965,7 @@ async def lessons_finish(payload: LessonFinishIn, user: dict = Depends(get_token
             "reason": f"perfect_lesson_{payload.difficulty}",
             "created_at": now.isoformat(),
         })
-    return {"xp_earned": xp_earned, "gems_earned": gems_earned}
+    return {"xp_earned": xp_earned, "gems_earned": gems_earned, "xp_boost_applied": boost_active}
 
 
 @api.post("/gems/grant")
@@ -906,6 +996,179 @@ async def gems_history(user: dict = Depends(get_token_user), limit: int = 30):
         {"user_id": str(user["_id"])}, {"_id": 0}
     ).sort("created_at", -1).limit(min(limit, 100))
     return {"transactions": [t async for t in cur]}
+
+
+# -------------------------------------------------------- SHOP
+# Gem-priced consumables. Mirrored values live in frontend `/shop` page.
+SHOP_ITEMS = {
+    "xp_boost_30m":  {"cost": 50,  "duration_min": 30},
+    "streak_freeze": {"cost": 100, "cap": 2},
+}
+
+# Gem packs — one-time Stripe checkouts. Values mirrored in frontend.
+GEM_PACKS = {
+    "pack_100":  {"gems": 100,  "amount_cad": 1.99},
+    "pack_500":  {"gems": 500,  "amount_cad": 7.99},
+    "pack_1200": {"gems": 1200, "amount_cad": 14.99},
+}
+
+
+@api.get("/shop/catalog")
+async def shop_catalog(user: dict = Depends(get_token_user)):
+    """Returns the current price/limits + user snapshot so the Shop UI can
+    render disabled/enabled states and countdowns without guessing."""
+    u = serialize_user(user)
+    return {
+        "items": SHOP_ITEMS,
+        "gem_packs": GEM_PACKS,
+        "user": {
+            "gems": u["gems"],
+            "xp_boost_until": u["xp_boost_until"],
+            "xp_boost_active": u["xp_boost_active"],
+            "xp_boost_seconds_left": u["xp_boost_seconds_left"],
+            "streak_freezes": u["streak_freezes"],
+        },
+    }
+
+
+@api.post("/shop/buy-xp-boost")
+async def buy_xp_boost(user: dict = Depends(get_token_user)):
+    item = SHOP_ITEMS["xp_boost_30m"]
+    gems = int(user.get("gems") or 0)
+    if gems < item["cost"]:
+        raise HTTPException(status_code=400, detail=f"Not enough gems (need {item['cost']}, have {gems})")
+    now = datetime.now(timezone.utc)
+    cur_raw = user.get("xp_boost_until")
+    cur_dt = None
+    if isinstance(cur_raw, str):
+        try:
+            cur_dt = datetime.fromisoformat(cur_raw)
+            if cur_dt.tzinfo is None:
+                cur_dt = cur_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            cur_dt = None
+    base = cur_dt if (cur_dt and cur_dt > now) else now
+    new_until = base + timedelta(minutes=item["duration_min"])
+    res = await db.users.find_one_and_update(
+        {"_id": user["_id"], "gems": {"$gte": item["cost"]}},
+        {"$inc": {"gems": -item["cost"]},
+         "$set": {"xp_boost_until": new_until.isoformat()}},
+        return_document=True,
+    )
+    if not res:
+        # Lost the race (concurrent buy) — gems dropped below threshold.
+        raise HTTPException(status_code=400, detail="Not enough gems")
+    await db.gem_transactions.insert_one({
+        "user_id": str(user["_id"]),
+        "delta": -item["cost"],
+        "reason": "shop_xp_boost_30m",
+        "created_at": now.isoformat(),
+    })
+    return {
+        "xp_boost_until": new_until.isoformat(),
+        "gems": int(res.get("gems") or 0),
+    }
+
+
+@api.post("/shop/buy-streak-freeze")
+async def buy_streak_freeze(user: dict = Depends(get_token_user)):
+    item = SHOP_ITEMS["streak_freeze"]
+    gems = int(user.get("gems") or 0)
+    owned = int(user.get("streak_freezes") or 0)
+    if owned >= item["cap"]:
+        raise HTTPException(status_code=400, detail=f"Already holding the max ({item['cap']}) streak freezes")
+    if gems < item["cost"]:
+        raise HTTPException(status_code=400, detail=f"Not enough gems (need {item['cost']}, have {gems})")
+    now = datetime.now(timezone.utc)
+    res = await db.users.find_one_and_update(
+        {"_id": user["_id"],
+         "gems": {"$gte": item["cost"]},
+         "$or": [{"streak_freezes": {"$exists": False}},
+                 {"streak_freezes": {"$lt": item["cap"]}}]},
+        {"$inc": {"gems": -item["cost"], "streak_freezes": 1}},
+        return_document=True,
+    )
+    if not res:
+        raise HTTPException(status_code=400, detail="Purchase rejected")
+    await db.gem_transactions.insert_one({
+        "user_id": str(user["_id"]),
+        "delta": -item["cost"],
+        "reason": "shop_streak_freeze",
+        "created_at": now.isoformat(),
+    })
+    return {
+        "streak_freezes": int(res.get("streak_freezes") or 0),
+        "gems": int(res.get("gems") or 0),
+    }
+
+
+@api.post("/streak/use-freeze")
+async def use_streak_freeze(user: dict = Depends(get_token_user)):
+    """Client-initiated when it detects a one-day gap and the user has a
+    freeze. Idempotent-ish: we just decrement atomically; the client is
+    expected to reset its local `dailyStreak.lastDate` to yesterday."""
+    res = await db.users.find_one_and_update(
+        {"_id": user["_id"], "streak_freezes": {"$gt": 0}},
+        {"$inc": {"streak_freezes": -1}},
+        return_document=True,
+    )
+    if not res:
+        raise HTTPException(status_code=400, detail="No streak freezes to use")
+    return {"streak_freezes": int(res.get("streak_freezes") or 0)}
+
+
+# -------------------------------------------------------- STRIPE GEM PACKS
+@api.post("/stripe/gems-checkout")
+async def stripe_gems_checkout(payload: dict, request: Request, user: dict = Depends(get_token_user)):
+    """One-time checkout for a gem pack. Webhook credits the user on
+    payment_intent.succeeded / checkout.session.completed."""
+    pack_id = (payload.get("pack_id") or "").strip()
+    origin = (payload.get("origin") or "").rstrip("/") or (FRONTEND_URL or "").rstrip("/")
+    pack = GEM_PACKS.get(pack_id)
+    if not pack:
+        raise HTTPException(status_code=400, detail="Unknown gem pack")
+    await ensure_stripe()
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "quantity": 1,
+                "price_data": {
+                    "currency": "cad",
+                    "unit_amount": int(round(pack["amount_cad"] * 100)),
+                    "product_data": {
+                        "name": f"{pack['gems']} Gems",
+                        "description": "timestables.ca gem pack",
+                    },
+                },
+            }],
+            success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{origin}/billing/cancel",
+            customer_email=user["email"],
+            client_reference_id=str(user["_id"]),
+            metadata={
+                "user_id": str(user["_id"]),
+                "kind": "gem_pack",
+                "pack_id": pack_id,
+                "gems": str(pack["gems"]),
+            },
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)[:160]}")
+    await db.payment_transactions.insert_one({
+        "session_id": session.id,
+        "user_id": str(user["_id"]),
+        "email": user["email"],
+        "amount": pack["amount_cad"],
+        "currency": "cad",
+        "status": "pending",
+        "payment_status": session.payment_status,
+        "kind": "gem_pack",
+        "pack_id": pack_id,
+        "gems": pack["gems"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": session.url, "session_id": session.id}
 
 
 # -------------------------------------------------------- ADMIN

@@ -41,11 +41,45 @@ export async function initRemoteSync() {
       // First login from this account: push current local state up.
       _push();
     }
+    // Auto-consume a streak freeze if the user missed exactly one day.
+    try { await maybeUseStreakFreezeOnBoot(); } catch {}
     return true;
   } catch {
     _remoteEnabled = false;
     return false;
   }
+}
+
+/**
+ * If the last recorded streak activity was exactly 2 days ago (i.e. the user
+ * missed yesterday), try to consume a Streak Freeze so the count doesn't reset.
+ * Server-authoritative: only patches local state if the server confirms.
+ */
+export async function maybeUseStreakFreezeOnBoot() {
+  const s = getState();
+  const prev = s.dailyStreak || { count: 0, lastDate: null };
+  if (!prev.lastDate || !prev.count) return false;
+  const d = new Date();
+  const daysAgo = (ds) => {
+    const a = new Date(ds + "T00:00:00");
+    const b = new Date(d.toISOString().slice(0, 10) + "T00:00:00");
+    return Math.round((b - a) / (1000 * 60 * 60 * 24));
+  };
+  let gap;
+  try { gap = daysAgo(prev.lastDate); } catch { return false; }
+  if (gap !== 2) return false;  // only save if exactly 1 missed day
+  try {
+    await api.post("/streak/use-freeze");
+  } catch {
+    return false;
+  }
+  // Patch local: advance lastDate by 1 so the count is preserved.
+  const yest = new Date(d.getTime() - 86400000).toISOString().slice(0, 10);
+  updateState((cur) => ({
+    ...cur,
+    dailyStreak: { count: cur.dailyStreak.count, lastDate: yest },
+  }));
+  return true;
 }
 
 export function disableRemoteSync() {

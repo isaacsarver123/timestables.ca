@@ -8,6 +8,7 @@ export const BillingSuccess = () => {
   const [params] = useSearchParams();
   const { refresh } = useAuth();
   const [status, setStatus] = useState("checking"); // checking | paid | pending | error
+  const [kind, setKind] = useState(null);           // 'gem_pack' | null (subscription)
   const sessionId = params.get("session_id");
 
   useEffect(() => {
@@ -18,6 +19,7 @@ export const BillingSuccess = () => {
       try {
         const { data } = await api.get(`/stripe/status/${sessionId}`);
         if (cancelled) return;
+        if (data.kind) setKind(data.kind);
         if (data.payment_status === "paid") {
           await refresh();
           setStatus("paid");
@@ -44,7 +46,22 @@ export const BillingSuccess = () => {
             <p className="text-sm text-muted">Hang tight, this only takes a moment.</p>
           </>
         )}
-        {status === "paid" && (
+        {status === "paid" && kind === "gem_pack" && (
+          <>
+            <CheckCircle2 className="mx-auto text-cyan-500" size={42} />
+            <h1 className="text-2xl font-bold text-fg" data-testid="billing-success-title">
+              Gems added!
+            </h1>
+            <p className="text-sm text-muted">
+              Your gems are in your account. Spend them on XP Boosts or Streak Freezes anytime.
+            </p>
+            <Link to="/shop" data-testid="billing-success-shop"
+                  className="inline-block bg-cyan-500 text-white brut-border brut-shadow font-bold uppercase tracking-wider text-sm px-5 py-2.5">
+              Back to Shop
+            </Link>
+          </>
+        )}
+        {status === "paid" && kind !== "gem_pack" && (
           <>
             <CheckCircle2 className="mx-auto text-emerald-500" size={42} />
             <h1 className="text-2xl font-bold text-fg" data-testid="billing-success-title">You're in!</h1>

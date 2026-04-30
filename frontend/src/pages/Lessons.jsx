@@ -1076,13 +1076,12 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
     <Star size={24} strokeWidth={2.5} />
   );
 
-  // Pulsing "next-up" ring — sits OUTSIDE the button (inset negative) so the
-  // amber halo is actually visible around the node instead of being hidden
-  // behind the dark zinc circle.
+  // Pulsing "next-up" ring — sits just outside the button so the amber halo
+  // is visible without spilling onto the text label below.
   const pulse = isNext && (
     <motion.span
-      className={`absolute -inset-2 ${lesson.boss ? "rounded-lg" : "rounded-full"} ring-4 ring-amber-400`}
-      animate={{ scale: [1, 1.18, 1], opacity: [0.75, 0.15, 0.75] }}
+      className={`absolute -inset-1 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-[3px] ring-amber-400`}
+      animate={{ scale: [1, 1.08, 1], opacity: [0.8, 0.25, 0.8] }}
       transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
       style={{ pointerEvents: "none" }}
     />
