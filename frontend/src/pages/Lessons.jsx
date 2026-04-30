@@ -50,17 +50,21 @@ const HARD_DOTS = 3;             // == TOTAL - BASE_QUESTIONS
 const TEST_HEARTS = 5;
 const TEST_QUESTIONS = 20;
 
-const PROGRESS_KEY = "tt_lesson_path_v2"; // bumped: schema now stores level state too
-function loadProgress() {
+const PROGRESS_KEY_PREFIX = "tt_lesson_path_v3";
+const EMPTY_PROGRESS = { completedLessons: {}, completedLevels: {} };
+function progressKeyForUser(userId) {
+  return `${PROGRESS_KEY_PREFIX}:${userId || "guest"}`;
+}
+function loadProgress(progressKey) {
   try {
-    const raw = localStorage.getItem(PROGRESS_KEY);
-    return raw ? JSON.parse(raw) : { completedLessons: {}, completedLevels: {} };
+    const raw = localStorage.getItem(progressKey);
+    return raw ? JSON.parse(raw) : EMPTY_PROGRESS;
   } catch (_) {
-    return { completedLessons: {}, completedLevels: {} };
+    return EMPTY_PROGRESS;
   }
 }
-function saveProgress(p) {
-  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); } catch (_) {}
+function saveProgress(progressKey, p) {
+  try { localStorage.setItem(progressKey, JSON.stringify(p)); } catch (_) {}
 }
 
 // Build a question from a lesson spec.
@@ -165,16 +169,21 @@ export default function Lessons() {
   const [explanation, setExplanation] = useState(null);
   const [result, setResult] = useState(null);
   const [streakInfo, setStreakInfo] = useState(null);
-  const [progress, setProgress] = useState(loadProgress);
+  const { user, refresh } = useAuth();
+  const progressKey = useMemo(() => progressKeyForUser(user?.id), [user?.id]);
+  const [progress, setProgress] = useState(() => loadProgress(progressKey));
   const [testTarget, setTestTarget] = useState(null); // legacy field used by render branches
   const [jumpAim, setJumpAim] = useState(null); // { aimLesson, level? } during a jump-here test
   const startedAt = useRef(0);
 
-  const { refresh } = useAuth();
   const guard = useNavGuard(phase === "play" || phase === "test");
   const nav = useNavigate();
 
   const q = run[idx];
+
+  useEffect(() => {
+    setProgress(loadProgress(progressKey));
+  }, [progressKey]);
 
   // ── unlock logic ──────────────────────────────────────────────────────────
   // A lesson unlocks once the previous flat-path lesson is complete OR its
@@ -411,7 +420,7 @@ export default function Lessons() {
         },
       };
       setProgress(next);
-      saveProgress(next);
+      saveProgress(progressKey, next);
     }
     try {
       const { data } = await api.post("/lessons/finish", {
@@ -467,7 +476,7 @@ export default function Lessons() {
         completedLevels: nextCompletedLevels,
       };
       setProgress(next);
-      saveProgress(next);
+      saveProgress(progressKey, next);
       addCoinsAndXp(0, jumpAim.level ? 80 : 30); // bigger reward for jumping a whole level
     }
     setResult({ passed, hearts, jumpAim });

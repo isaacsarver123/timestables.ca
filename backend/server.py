@@ -417,6 +417,11 @@ async def register(payload: RegisterIn, request: Request, response: Response):
         "signup_ip": ip,
     })
     user = await db.users.find_one({"_id": res.inserted_id})
+    await db.user_state.update_one(
+        {"user_id": str(user["_id"])},
+        {"$setOnInsert": {"state": {}, "updated_at": now.isoformat()}},
+        upsert=True,
+    )
     set_auth_cookies(
         response,
         create_access_token(str(user["_id"]), user["email"]),

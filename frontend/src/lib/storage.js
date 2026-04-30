@@ -38,7 +38,16 @@ export async function initRemoteSync() {
         _hydrating = false;
       }
     } else {
-      // First login from this account: push current local state up.
+      // Brand-new or unsynced account: start fresh instead of inheriting
+      // whatever another account last used in this browser.
+      _hydrating = true;
+      try {
+        const clean = freshStateFromPreferences(readRaw() || {});
+        localStorage.setItem(KEY, JSON.stringify(clean));
+        subscribers.forEach((cb) => { try { cb(getState()); } catch {} });
+      } finally {
+        _hydrating = false;
+      }
       _push();
     }
     // Auto-consume a streak freeze if the user missed exactly one day.
@@ -109,6 +118,25 @@ const DEFAULT_STATE = {
 };
 
 const subscribers = new Set();
+
+function freshStateFromPreferences(source = {}) {
+  return {
+    ...DEFAULT_STATE,
+    selectedTables:
+      Array.isArray(source.selectedTables) && source.selectedTables.length
+        ? [...source.selectedTables]
+        : [...DEFAULT_STATE.selectedTables],
+    opMode: source.opMode || DEFAULT_STATE.opMode,
+    inputMode: source.inputMode || DEFAULT_STATE.inputMode,
+    soundOn: typeof source.soundOn === "boolean" ? source.soundOn : DEFAULT_STATE.soundOn,
+    theme: source.theme || DEFAULT_STATE.theme,
+    powerups: { ...DEFAULT_STATE.powerups },
+    stats: {},
+    daily: { ...DEFAULT_STATE.daily },
+    dailyStreak: { ...DEFAULT_STATE.dailyStreak },
+    history: {},
+  };
+}
 
 function readRaw() {
   try {
