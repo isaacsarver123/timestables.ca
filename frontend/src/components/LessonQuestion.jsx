@@ -109,11 +109,17 @@ function GroupedDots({ a, b, motionSettings }) {
         const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
-          <g
-            key={i}
-            transform={`translate(${dx + drift.x1}, ${dy + drift.y1})`}
-          >
-            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+          <g key={i} transform={`translate(${dx}, ${dy})`}>
+            <g>
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values={`0 0; ${drift.x2 * 2} ${drift.y2 * 2}; 0 0`}
+                dur={`${drift.duration}s`}
+                repeatCount="indefinite"
+              />
+              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            </g>
           </g>
         );
       })}
@@ -156,11 +162,17 @@ function DotGrid({ a, b, motionSettings }) {
         const { dx, dy } = repulsion(cx, cy, pointer, gap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
-          <g
-            key={i}
-            transform={`translate(${dx + drift.x1}, ${dy + drift.y1})`}
-          >
-            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+          <g key={i} transform={`translate(${dx}, ${dy})`}>
+            <g>
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values={`0 0; ${drift.x2 * 2} ${drift.y2 * 2}; 0 0`}
+                dur={`${drift.duration}s`}
+                repeatCount="indefinite"
+              />
+              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+            </g>
           </g>
         );
       })}
@@ -249,15 +261,21 @@ function DivGroups({ dividend, divisor, motionSettings }) {
       {Array.from({ length: dividend }).map((_, i) => {
         const drift = idleDrift(i, (motionSettings?.driftAmount ?? 1.0) * 0.75);
         return (
-          <g
-            key={i}
-            transform={`translate(${drift.x1}, ${drift.y1})`}
-          >
-            <circle
-              cx={pad + (i % cols) * gap + gap / 2}
-              cy={pad + Math.floor(i / cols) * gap + gap / 2}
-              r={dotR} fill="#06b6d4"
-            />
+          <g key={i}>
+            <g>
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values={`0 0; ${drift.x2 * 1.8} ${drift.y2 * 1.8}; 0 0`}
+                dur={`${drift.duration}s`}
+                repeatCount="indefinite"
+              />
+              <circle
+                cx={pad + (i % cols) * gap + gap / 2}
+                cy={pad + Math.floor(i / cols) * gap + gap / 2}
+                r={dotR} fill="#06b6d4"
+              />
+            </g>
           </g>
         );
       })}

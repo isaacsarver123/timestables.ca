@@ -505,7 +505,7 @@ export default function Lessons() {
       // Fit the entire play UI inside the viewport (no scroll). The container
       // collapses the top/bottom padding the Layout adds so we get more height,
       // and uses dvh so iOS bottom-bar collapse doesn't push content offscreen.
-      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)] surface brut-border rounded-2xl px-4 sm:px-5" data-testid="lessons-page">
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}
@@ -531,7 +531,7 @@ export default function Lessons() {
           >
             <X size={14} />
           </button>
-          <div className="flex-1 h-3 brut-border surface overflow-hidden" data-testid="lesson-progress-bar">
+          <div className="flex-1 h-4 brut-border surface overflow-hidden" data-testid="lesson-progress-bar">
             <motion.div
               className="h-full bg-emerald-500"
               animate={{ width: `${pct}%` }}
@@ -553,7 +553,7 @@ export default function Lessons() {
                 <div
                   key={i}
                   data-testid={`lesson-hard-dot-${i}`}
-                  className={`w-3 h-3 brut-border ${cls}`}
+                  className={`w-4 h-4 brut-border ${cls}`}
                 />
               );
             })}
@@ -630,7 +630,7 @@ export default function Lessons() {
     const pct = ((idx + (status === "idle" ? 0 : 1)) / TEST_QUESTIONS) * 100;
     const aimingForLevel = !!jumpAim.level;
     return (
-      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)] surface brut-border rounded-2xl px-4 sm:px-5" data-testid="lessons-page">
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}
@@ -660,7 +660,7 @@ export default function Lessons() {
           >
             <X size={14} />
           </button>
-          <div className="flex-1 h-3 brut-border surface overflow-hidden">
+          <div className="flex-1 h-4 brut-border surface overflow-hidden">
             <motion.div className="h-full bg-blue-500" animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
           </div>
           <div className="flex items-center gap-1" data-testid="test-hearts">
