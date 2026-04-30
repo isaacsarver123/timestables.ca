@@ -505,7 +505,7 @@ export default function Lessons() {
       // Fit the entire play UI inside the viewport (no scroll). The container
       // collapses the top/bottom padding the Layout adds so we get more height,
       // and uses dvh so iOS bottom-bar collapse doesn't push content offscreen.
-      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)] surface brut-border rounded-2xl px-4 sm:px-5" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}
@@ -630,7 +630,7 @@ export default function Lessons() {
     const pct = ((idx + (status === "idle" ? 0 : 1)) / TEST_QUESTIONS) * 100;
     const aimingForLevel = !!jumpAim.level;
     return (
-      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)]" data-testid="lessons-page">
+      <div className="max-w-3xl mx-auto flex flex-col -my-4 sm:-my-6 h-[calc(100dvh-160px)] sm:h-[calc(100dvh-180px)] surface brut-border rounded-2xl px-4 sm:px-5" data-testid="lessons-page">
         <ConfirmLeaveModal
           open={guard.open}
           onCancel={guard.cancel}

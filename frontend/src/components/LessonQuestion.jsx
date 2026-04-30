@@ -386,7 +386,7 @@ export default function LessonQuestion({ question, onAnswer }) {
     ? (isCorrect ? "bg-emerald-500 text-white" : "bg-rose-500 text-white")
     : selected != null
       ? "bg-blue-600 text-white"
-      : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950";
+      : "surface text-fg";
 
   return (
     <div className="flex flex-col w-full h-full min-h-0" data-testid="lesson-question-card">
@@ -476,7 +476,7 @@ export default function LessonQuestion({ question, onAnswer }) {
           data-testid="lesson-check"
           className={`w-full brut-border brut-shadow font-bold uppercase tracking-wider text-xs py-3 rounded-md transition-colors ${
             selected != null && !committed
-              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 hover:bg-blue-600 hover:text-white"
+              ? "bg-blue-600 text-white hover:bg-blue-500"
               : committed && isCorrect
                 ? "bg-emerald-500 text-white"
                 : committed && !isCorrect
