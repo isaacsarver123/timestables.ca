@@ -54,16 +54,8 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-function idleDrift(i, amp = 1.0) {
-  const angleA = ((i * 47) % 360) * (Math.PI / 180);
-  const angleB = angleA + 1.9;
-  return {
-    x1: Math.cos(angleA) * amp,
-    y1: Math.sin(angleA) * amp,
-    x2: Math.cos(angleB) * amp,
-    y2: Math.sin(angleB) * amp,
-    duration: 4.2 + (i % 5) * 0.45,
-  };
+function idleDrift() {
+  return { x1: 0, y1: 0, x2: 0, y2: 0, duration: 0 };
 }
 
 const PUSH_FORCE = 0.75;
@@ -79,7 +71,7 @@ function GroupedDots({ a, b, motionSettings }) {
   const dotR = total > 80 ? 2.5 : total > 40 ? 3.25 : total > 16 ? 4 : 6;
   const inGap = dotR * 2 + 6;
   const colGap = inGap + 12;
-  const pad = dotR + 10;
+  const pad = dotR + 14;
   const W = (cols - 1) * colGap + inGap + pad * 2;
   const H = rows * inGap + pad * 2;
 
@@ -107,19 +99,9 @@ function GroupedDots({ a, b, motionSettings }) {
         const cx = pad + col * colGap + inGap / 2;
         const cy = pad + row * inGap + inGap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
-        const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
           <g key={i} transform={`translate(${dx}, ${dy})`}>
-            <g>
-              <animateTransform
-                attributeName="transform"
-                type="translate"
-                values={`0 0; ${drift.x2 * 2} ${drift.y2 * 2}; 0 0`}
-                dur={`${drift.duration}s`}
-                repeatCount="indefinite"
-              />
-              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
-            </g>
+            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
           </g>
         );
       })}
@@ -134,7 +116,7 @@ function DotGrid({ a, b, motionSettings }) {
   const total = rows * cols;
   const dotR = total > 80 ? 2.5 : total > 40 ? 3.25 : total > 16 ? 4 : 6;
   const gap = dotR * 2 + 8;
-  const pad = dotR + 10;
+  const pad = dotR + 14;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   const svgRef = useRef(null);
@@ -160,19 +142,9 @@ function DotGrid({ a, b, motionSettings }) {
         const cx = pad + c * gap + gap / 2;
         const cy = pad + r * gap + gap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, gap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
-        const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
           <g key={i} transform={`translate(${dx}, ${dy})`}>
-            <g>
-              <animateTransform
-                attributeName="transform"
-                type="translate"
-                values={`0 0; ${drift.x2 * 2} ${drift.y2 * 2}; 0 0`}
-                dur={`${drift.duration}s`}
-                repeatCount="indefinite"
-              />
-              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
-            </g>
+            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
           </g>
         );
       })}
@@ -253,32 +225,19 @@ function DivGroups({ dividend, divisor, motionSettings }) {
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 3.25 : 4;
   const gap = dotR * 2 + 6;
-  const pad = dotR + 8;
+  const pad = dotR + 12;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
-      {Array.from({ length: dividend }).map((_, i) => {
-        const drift = idleDrift(i, (motionSettings?.driftAmount ?? 1.0) * 0.75);
-        return (
-          <g key={i}>
-            <g>
-              <animateTransform
-                attributeName="transform"
-                type="translate"
-                values={`0 0; ${drift.x2 * 1.8} ${drift.y2 * 1.8}; 0 0`}
-                dur={`${drift.duration}s`}
-                repeatCount="indefinite"
-              />
-              <circle
-                cx={pad + (i % cols) * gap + gap / 2}
-                cy={pad + Math.floor(i / cols) * gap + gap / 2}
-                r={dotR} fill="#06b6d4"
-              />
-            </g>
-          </g>
-        );
-      })}
+      {Array.from({ length: dividend }).map((_, i) => (
+        <circle
+          key={i}
+          cx={pad + (i % cols) * gap + gap / 2}
+          cy={pad + Math.floor(i / cols) * gap + gap / 2}
+          r={dotR} fill="#06b6d4"
+        />
+      ))}
     </svg>
   );
 }
@@ -384,7 +343,7 @@ export default function LessonQuestion({ question, onAnswer }) {
 
       <div className="flex-1 min-h-0 grid place-items-center mb-2">
         <div
-          className="brut-border surface rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-[4/3] max-h-[38vh] overflow-hidden"
+          className="brut-border surface rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-square max-h-[40vh] overflow-hidden"
           data-testid="lesson-question-visual"
         >
           <div className="w-full h-full">{visual}</div>
