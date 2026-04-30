@@ -330,7 +330,7 @@ export default function LessonQuestion({ question, onAnswer }) {
 
   return (
     <div className="flex flex-col w-full h-full min-h-0" data-testid="lesson-question-card">
-      <div className="text-fg text-base sm:text-lg font-medium leading-snug mb-2 px-1 shrink-0">
+      <div className="text-fg text-base sm:text-lg font-medium leading-snug mb-2 px-1 shrink-0" data-testid="lesson-question-prompt">
         {plainPrompt(question)}
       </div>
 

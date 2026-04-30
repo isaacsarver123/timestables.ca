@@ -27,7 +27,23 @@ self-host docs for an Ubuntu server with reserved-port constraints.
 
 ## Implementation log
 
-### v5.6 — Lesson visual fixes + challenge structure (this round)
+### v5.7 — Lesson flow overhaul + Learn polish + global nav-guard (this round)
+- **Two-phase answer flow** (`LessonQuestion.jsx`): tap a tile → SELECT (blue outline, uncommitted), then tap CHECK → commit. Correct answers: emerald flash + ~900ms auto-advance. Wrong answers: red flash + parent's explanation card (`setStatus('reviewing')`). Critically, a correct answer NEVER flashes red first.
+- **End-of-lesson fanfare** — new `sfx.fanfare()` (Web-Audio brass triad run C5→E5→G5, then sustained C/E/G + C6 shimmer). Fires on `CompletionCelebration` mount. XP count-up slowed 950ms → **2400ms** with a `sfx.tick()` chime on each of ~7 buckets for rising drama.
+- **Red challenge dot on wrong** — `hardResults[]` array now tracks per-challenge outcome. Dot 0/1/2 is emerald on correct, `bg-rose-500` on wrong, `surface-2` before the question is reached.
+- **Completed-only shadow** — LessonNode's `brut-shadow-sm` now only renders when `done`. Next-up and locked nodes are flat so the eye is drawn only to completions.
+- **Auto-scroll to current lesson** — when `/lessons` lobby mounts, scrolls the current next-up node into view (block:center) so returning users don't start at Level-1 Lesson-1 every time.
+- **Radix Popover** for locked lesson nodes — portaled to `<body>`, collision-detected, click-triggered. Eliminates the recurring hover-overlap + Jump-here-unreachable bug.
+- **Pulsing next-up ring** moved to `-inset-2` with 1.18× scale so the amber halo is visible OUTSIDE the button instead of hidden behind it.
+- **Dot-visualizer polish** — `PUSH_FORCE = 0.6` (was 2.5, ~1/4 of previous motion). Added `pad = dotR + 4` to every SVG viewBox so dots can't clip at the box edges.
+- **Global nav-guard during a lesson** — `lib/leaveGuard.js` now uses a module-level subscriber pattern (works with BrowserRouter, doesn't need createBrowserRouter). Every top-nav Link in `Layout.jsx` routes through `requestGuardedNav(path, () => navigate(path))` so Home / Stats / Shop / Profile all prompt the same `ConfirmLeaveModal` while a lesson is running.
+- **Learn presets** — `/learn` table picker now has five one-tap chips: `2–5`, `2–10`, `2–12`, `1–20`, `Tough` (6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 19).
+- **Learn table view** — `SingleTable` renders its 12 rows in a 2-column grid (6+6) so users don't have to scroll up and down when multiple tables are selected.
+- **Flashcards single "Next" button** — removed Missed/Knew pair. One emerald Next button, plus a Shuffle action. Deck is now always shuffled even for a single-table pick.
+- **Nicer tips** for ×7, ×8, ×9, ×10, ×11, ×12, ×13, ×16, ×17 — replaced terse one-liners with proper explanations + worked examples. The ×7 card now has four distinct strategies instead of the opaque "six-three is seven-nine" riddle.
+- **Backend `wrong_answer_flash_ms` default** lowered **3000 → 1500 ms**, with an auto-migration on boot for any CMS doc still holding the old 3000 value.
+
+### v5.6 — Lesson visual fixes + challenge structure (prior round)
 - **Fixed the "10 dots became 1 giant circle" bug** — `motion.circle` with animated `cx`/`cy` was unreliable in SVG. Replaced with `motion.g` + `transform: translate(x, y)` for the cursor-react motion; underlying `<circle>` keeps static `cx`/`cy` attributes so all dots always render at distinct positions.
 - **Auto-transposing layouts** — when `rows > cols * 1.6`, GroupedDots and DotGrid swap dimensions so a 10×3 multiplication renders as a wide 3×10 grid that fits the 5/4 canvas (no clipping).
 - **Tightened motion** — repulsion force reduced from 7 → 2.5 px and range from 2.5× to 1.6× cell-width, so dots no longer feel hyperactive.
