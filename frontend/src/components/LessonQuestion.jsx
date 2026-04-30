@@ -2,7 +2,6 @@
 // Two-phase answer flow: tap a tile to SELECT (blue), then tap CHECK to commit.
 // Parent handles the wrong-answer explanation card.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, MoveHorizontal } from "lucide-react";
 import { sfx } from "@/lib/sound";
 import { getLessonMotionSettings, subscribeCms } from "@/lib/cms";
@@ -110,25 +109,12 @@ function GroupedDots({ a, b, motionSettings }) {
         const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
-          <motion.g
+          <g
             key={i}
-            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
-            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
+            transform={`translate(${dx + drift.x1}, ${dy + drift.y1})`}
           >
-            <motion.g
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
-              transition={{
-                scale:   { delay: i * 0.012, duration: 0.18 },
-                opacity: { delay: i * 0.012, duration: 0.18 },
-                x:       { type: "spring", stiffness: 240, damping: 26 },
-                y:       { type: "spring", stiffness: 240, damping: 26 },
-              }}
-              style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
-            >
-              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
-            </motion.g>
-          </motion.g>
+            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+          </g>
         );
       })}
     </svg>
@@ -170,25 +156,12 @@ function DotGrid({ a, b, motionSettings }) {
         const { dx, dy } = repulsion(cx, cy, pointer, gap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         const drift = idleDrift(i, motionSettings?.driftAmount ?? 1.0);
         return (
-          <motion.g
+          <g
             key={i}
-            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
-            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
+            transform={`translate(${dx + drift.x1}, ${dy + drift.y1})`}
           >
-            <motion.g
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1, x: dx, y: dy }}
-              transition={{
-                scale:   { delay: i * 0.012, duration: 0.18 },
-                opacity: { delay: i * 0.012, duration: 0.18 },
-                x:       { type: "spring", stiffness: 240, damping: 26 },
-                y:       { type: "spring", stiffness: 240, damping: 26 },
-              }}
-              style={{ transformOrigin: `${cx}px ${cy}px`, transformBox: "fill-box" }}
-            >
-              <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
-            </motion.g>
-          </motion.g>
+            <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
+          </g>
         );
       })}
     </svg>
@@ -253,11 +226,11 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
             </g>
           );
         })}
-        <motion.g animate={{ x: xForVal(val) }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
+        <g transform={`translate(${xForVal(val)}, 0)`}>
           <circle cx={0} cy={H / 2} r={11} fill="#10b981" stroke="#fff" strokeWidth={2} />
           <text x={0} y={H / 2 - 18} fontSize="12" fill="#10b981" textAnchor="middle"
                 fontFamily="ui-monospace,monospace" fontWeight="800">{val}</text>
-        </motion.g>
+        </g>
       </svg>
     </div>
   );
@@ -276,19 +249,16 @@ function DivGroups({ dividend, divisor, motionSettings }) {
       {Array.from({ length: dividend }).map((_, i) => {
         const drift = idleDrift(i, (motionSettings?.driftAmount ?? 1.0) * 0.75);
         return (
-          <motion.g
+          <g
             key={i}
-            animate={{ x: [drift.x1, drift.x2, drift.x1], y: [drift.y1, drift.y2, drift.y1] }}
-            transition={{ duration: drift.duration, repeat: Infinity, ease: "easeInOut" }}
+            transform={`translate(${drift.x1}, ${drift.y1})`}
           >
-            <motion.circle
+            <circle
               cx={pad + (i % cols) * gap + gap / 2}
               cy={pad + Math.floor(i / cols) * gap + gap / 2}
               r={dotR} fill="#06b6d4"
-              initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: i * 0.015, duration: 0.18 }}
             />
-          </motion.g>
+          </g>
         );
       })}
     </svg>
@@ -404,28 +374,15 @@ export default function LessonQuestion({ question, onAnswer }) {
       </div>
 
       <div className="brut-border-soft surface-2 rounded-md py-1.5 mb-2 grid place-items-center shrink-0" data-testid="lesson-answer-slot">
-        <AnimatePresence mode="wait">
-          {selected != null ? (
-            <motion.div
-              key={`${selected}-${committed}-${isCorrect}`}
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: committed && isCorrect ? [1, 1.18, 1] : 1, opacity: 1 }}
-              exit={{ scale: 0.6, opacity: 0 }}
-              transition={{ duration: committed && isCorrect ? 0.45 : 0.18, ease: [0.34, 1.56, 0.64, 1] }}
-              className={`brut-border ${slotColor} px-4 py-1 font-mono font-black text-2xl tabular-nums rounded-md`}
-            >
-              {selected}
-              {committed && isCorrect && <CheckCircle2 size={16} className="inline ml-1.5 -mt-1" />}
-              {committed && !isCorrect && <XCircle size={16} className="inline ml-1.5 -mt-1" />}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="text-muted px-6 py-1 font-mono text-xl"
-            >?</motion.div>
-          )}
-        </AnimatePresence>
+        {selected != null ? (
+          <div className={`brut-border ${slotColor} px-4 py-1 font-mono font-black text-2xl tabular-nums rounded-md`}>
+            {selected}
+            {committed && isCorrect && <CheckCircle2 size={16} className="inline ml-1.5 -mt-1" />}
+            {committed && !isCorrect && <XCircle size={16} className="inline ml-1.5 -mt-1" />}
+          </div>
+        ) : (
+          <div className="text-muted px-6 py-1 font-mono text-xl">?</div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2 shrink-0" data-testid="lesson-answer-choices">
@@ -447,21 +404,15 @@ export default function LessonQuestion({ question, onAnswer }) {
             cls = "surface text-muted opacity-60";
           }
           return (
-            <motion.button
+            <button
               key={c}
               onClick={() => pick(c)}
               disabled={committed}
               data-testid={`lesson-answer-tile-${c}`}
-              animate={
-                committed && isPicked && isCorrect ? { scale: [1, 1.08, 1] }
-                : committed && isPicked && !isCorrect ? { x: [0, -6, 6, -4, 4, 0] }
-                : { scale: 1, x: 0 }
-              }
-              transition={{ duration: 0.4 }}
               className={`brut-border brut-shadow-sm py-3 px-2 font-mono font-black text-2xl tabular-nums transition-colors rounded-md ${cls} disabled:cursor-not-allowed`}
             >
               {c}
-            </motion.button>
+            </button>
           );
         })}
       </div>
