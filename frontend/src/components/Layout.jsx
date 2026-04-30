@@ -372,10 +372,10 @@ export const Layout = ({ children }) => {
         />
       )}
 
-      <footer className="brut-border-soft border-x-0 border-b-0 surface">
-        <div className="max-w-6xl mx-auto px-5 sm:px-8 py-3 flex justify-between items-center text-[11px] text-muted font-mono">
-          <span data-testid="footer-text">{footerText}</span>
-          <span>×  ÷  =</span>
+      <footer className="brut-border-soft border-x-0 border-b-0 surface overflow-x-hidden">
+        <div className="max-w-6xl mx-auto px-5 sm:px-8 py-3 flex flex-wrap justify-between items-center gap-2 text-[11px] text-muted font-mono min-w-0">
+          <span data-testid="footer-text" className="min-w-0 break-words">{footerText}</span>
+          <span className="shrink-0">×  ÷  =</span>
         </div>
       </footer>
     </div>

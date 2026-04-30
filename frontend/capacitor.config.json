@@ -1,0 +1,6 @@
+{
+  "appId": "ca.timestables.app",
+  "appName": "TimesTables",
+  "webDir": "build",
+  "bundledWebRuntime": false
+}

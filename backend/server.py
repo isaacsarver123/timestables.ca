@@ -37,6 +37,7 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 PRICE_CAD = float(os.environ.get("SUBSCRIPTION_PRICE_CAD", "5.00"))
 FAMILY_PRICE_CAD = float(os.environ.get("FAMILY_SUBSCRIPTION_PRICE_CAD", "15.00"))
+FAMILY_MIN_SLOTS = int(os.environ.get("FAMILY_MIN_SLOTS", "2"))
 FAMILY_INCLUDED_SLOTS = int(os.environ.get("FAMILY_INCLUDED_SLOTS", "6"))
 FAMILY_MAX_SLOTS = int(os.environ.get("FAMILY_MAX_SLOTS", "10"))
 FAMILY_EXTRA_SLOT_PRICE_CAD = float(os.environ.get("FAMILY_EXTRA_SLOT_PRICE_CAD", "5.00"))
@@ -217,10 +218,10 @@ async def ensure_stripe() -> str:
 
 def _family_price_for_slots(slots: int) -> float:
     slots = int(slots or FAMILY_INCLUDED_SLOTS)
-    if slots < FAMILY_INCLUDED_SLOTS or slots > FAMILY_MAX_SLOTS:
+    if slots < FAMILY_MIN_SLOTS or slots > FAMILY_MAX_SLOTS:
         raise HTTPException(
             status_code=400,
-            detail=f"Family slots must be between {FAMILY_INCLUDED_SLOTS} and {FAMILY_MAX_SLOTS}."
+            detail=f"Family slots must be between {FAMILY_MIN_SLOTS} and {FAMILY_MAX_SLOTS}."
         )
     return FAMILY_PRICE_CAD + max(0, slots - FAMILY_INCLUDED_SLOTS) * FAMILY_EXTRA_SLOT_PRICE_CAD
 
@@ -318,9 +319,9 @@ def _subscription_plan_details(plan: Optional[str], family_slots: Optional[int])
     slots = int(family_slots or FAMILY_INCLUDED_SLOTS)
     if plan_kind == "family":
         amount = _family_price_for_slots(slots)
-        product_name = "timestables.ca Family"
+        product_name = "TimesTables, MAX Family"
         return "family", slots, amount, product_name
-    return "individual", 0, PRICE_CAD, "timestables.ca Premium"
+    return "individual", 0, PRICE_CAD, "TimesTables"
 
 
 class FamilyInviteIn(BaseModel):
@@ -656,7 +657,7 @@ async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
             {"owner_user_id": user_id},
             {
                 "$set": {
-                    "max_slots": max(FAMILY_INCLUDED_SLOTS, family_slots or FAMILY_INCLUDED_SLOTS),
+                    "max_slots": max(FAMILY_MIN_SLOTS, family_slots or FAMILY_INCLUDED_SLOTS),
                     "subscription_status": chosen.status,
                     "updated_at": now,
                 },

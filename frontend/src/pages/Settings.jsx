@@ -32,6 +32,12 @@ import { setSoundEnabled } from "@/lib/sound";
 import { useAuth } from "@/lib/auth";
 import { api, formatErr } from "@/lib/api";
 import CardOnFile from "@/components/CardOnFile";
+import { Slider } from "@/components/ui/slider";
+
+const FAMILY_MIN_SLOTS = 2;
+const FAMILY_INCLUDED_SLOTS = 6;
+const FAMILY_MAX_SLOTS = 10;
+const clampFamilySlots = (value) => Math.min(FAMILY_MAX_SLOTS, Math.max(FAMILY_MIN_SLOTS, Number(value) || FAMILY_INCLUDED_SLOTS));
 
 const Settings = () => {
   const [state, setState] = useState(getState());
@@ -284,7 +290,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
   const active = ["active", "trialing", "past_due"].includes(status);
   const isFamily = sub.plan_kind === "family";
   const isIndividual = sub.plan_kind !== "family";
-  const [familySlots, setFamilySlots] = useState(Math.max(6, Number(sub.family_slots) || 6));
+  const [familySlots, setFamilySlots] = useState(clampFamilySlots(sub.family_slots || FAMILY_INCLUDED_SLOTS));
   const [family, setFamily] = useState(null);
   const [showSeatPicker, setShowSeatPicker] = useState(false);
   const [familyBusy, setFamilyBusy] = useState(false);
@@ -296,7 +302,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
 
   useEffect(() => {
     if (isFamily && (sub.family_slots || family?.max_slots)) {
-      setFamilySlots(Math.max(6, Number(sub.family_slots || family?.max_slots) || 6));
+      setFamilySlots(clampFamilySlots(sub.family_slots || family?.max_slots || FAMILY_INCLUDED_SLOTS));
     }
   }, [isFamily, sub.family_slots, family?.max_slots]);
 
@@ -321,8 +327,8 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
 
   const FamilyOfferCard = ({ buttonLabel, testid }) => (
     <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid={testid}>
-      <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> Family</div>
-      <div className="text-xs text-muted">$15/month includes 6 total seats, then +$5 per extra seat up to 10.</div>
+      <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> TimesTables, MAX Family</div>
+      <div className="text-xs text-muted">$15/month includes up to 6 total seats, then +$5 per extra seat up to 10.</div>
       <button
         onClick={handleFamilyAction}
         disabled={familyBusy}
@@ -337,14 +343,25 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
         data-testid={`${testid}-toggle-seats`}
         className="text-xs font-bold text-fg underline underline-offset-2 hover:text-blue-600"
       >
-        {showSeatPicker ? "Hide seat picker" : "Need more seats?"}
+        {showSeatPicker ? "Done choosing seats" : "Need more or fewer seats?"}
       </button>
       {showSeatPicker && (
         <div className="space-y-2 pt-1">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium">Seats</div>
-          <div className="flex items-center gap-2">
-            <input type="range" min="6" max="10" step="1" value={familySlots} onChange={(e) => setFamilySlots(Number(e.target.value))} className="flex-1" />
-            <div className="w-16 text-right font-bold text-fg">{familySlots}</div>
+          <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.25em] text-muted font-medium">
+            <span>Seats</span>
+            <span>{familySlots}</span>
+          </div>
+          <Slider
+            value={[familySlots]}
+            min={FAMILY_MIN_SLOTS}
+            max={FAMILY_MAX_SLOTS}
+            step={1}
+            onValueChange={(value) => setFamilySlots(clampFamilySlots(value?.[0]))}
+            aria-label="Family seats"
+          />
+          <div className="flex items-center justify-between gap-3 text-[11px] text-muted">
+            <span>{FAMILY_MIN_SLOTS} seats min</span>
+            <span>{FAMILY_MAX_SLOTS} seats max</span>
           </div>
           <div className="text-[11px] text-muted">{familySlots} total seats, ${familyPrice} CAD/month.</div>
         </div>
@@ -379,7 +396,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
             {isFamily ? "Family" : "Subscribed"} · ${Number(sub.amount_cad || 5).toFixed(2)} CAD / {sub.interval}
           </span>
         </div>
-        <Tile label="Plan" value={isFamily ? "Max Family" : "Max Individual"} testid="billing-plan-kind" />
+        <Tile label="Plan" value={isFamily ? "TimesTables, MAX Family" : "TimesTables"} testid="billing-plan-kind" />
         {isFamily && (
           <Tile label="Seats" value={`${sub.family_slots || family?.max_slots || 6} total`} sub="Owner included" testid="billing-family-slots" />
         )}
@@ -395,10 +412,10 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
           <div className="brut-border-soft surface-2 p-4 space-y-3" data-testid="billing-upgrade-family">
             <div>
               <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1">Current plan</div>
-              <div className="font-bold text-fg">Max Individual</div>
-              <div className="text-xs text-muted mt-1">Need more? Switch to Max Family anytime.</div>
+              <div className="font-bold text-fg">TimesTables</div>
+              <div className="text-xs text-muted mt-1">Need more? Switch to TimesTables, MAX Family anytime.</div>
             </div>
-            <FamilyOfferCard buttonLabel="Switch to Max Family" testid="billing-switch-family" />
+            <FamilyOfferCard buttonLabel="Switch to TimesTables, MAX Family" testid="billing-switch-family" />
           </div>
         )}
         <p className="text-[11px] text-muted leading-relaxed" data-testid="billing-charge-line">
@@ -437,7 +454,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
       {TrialCopy}
       <div className="grid gap-3 md:grid-cols-2">
         <div className="brut-border-soft surface-2 p-4 space-y-3">
-          <div className="font-bold text-fg">Individual</div>
+          <div className="font-bold text-fg">TimesTables</div>
           <div className="text-xs text-muted">One learner, full access.</div>
           <button
             onClick={() => onSubscribe("individual")}
