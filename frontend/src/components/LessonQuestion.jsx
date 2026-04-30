@@ -315,7 +315,7 @@ function BigNumber({ a, b, symbol }) {
 export default function LessonQuestion({ question, onAnswer }) {
   const [selected, setSelected] = useState(null);
   const [committed, setCommitted] = useState(false);
-  const [motion, setMotion] = useState(() => getLessonMotionSettings());
+  const [motionSettings, setMotionSettings] = useState(() => getLessonMotionSettings());
   const advanceTimer = useRef(null);
   const questionId = `${question.key ?? "no-key"}:${question.op}:${question.a}:${question.b}:${question.answer}`;
   const choices = useMemo(() => makeChoices(question.answer), [question.answer]);
@@ -335,7 +335,7 @@ export default function LessonQuestion({ question, onAnswer }) {
   }, []);
 
   useEffect(() => subscribeCms((doc) => {
-    setMotion({
+    setMotionSettings({
       driftAmount: Number(doc?.lesson_drift_amount ?? getLessonMotionSettings().driftAmount),
       mouseForce: Number(doc?.lesson_mouse_force ?? getLessonMotionSettings().mouseForce),
       mouseRadius: Number(doc?.lesson_mouse_radius ?? getLessonMotionSettings().mouseRadius),
@@ -371,14 +371,14 @@ export default function LessonQuestion({ question, onAnswer }) {
   };
 
   let visual;
-  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} motionSettings={motion} />;
-  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} motionSettings={motion} />;
+  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} motionSettings={motionSettings} />;
+  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} motionSettings={motionSettings} />;
   else if (kind === "numberLine") visual = (
     <DraggableNumberLine dividend={question.a} divisor={question.b}
       locked={committed}
       onPick={(v) => { if (!committed) { setSelected(v); } }} />
   );
-  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} motionSettings={motion} />;
+  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} motionSettings={motionSettings} />;
   else visual = <BigNumber a={question.a} b={question.b} symbol={question.op} />;
 
   // Slot colour: neutral while selecting, green/rose once committed.
