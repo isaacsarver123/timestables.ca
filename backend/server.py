@@ -240,6 +240,9 @@ class CMSIn(BaseModel):
     login_welcome_title: Optional[str] = None
     login_welcome_body: Optional[str] = None
     wrong_answer_flash_ms: Optional[int] = None
+    lesson_drift_amount: Optional[float] = None
+    lesson_mouse_force: Optional[float] = None
+    lesson_mouse_radius: Optional[float] = None
     stripe_secret_key: Optional[str] = None
 
 
@@ -336,6 +339,9 @@ async def on_startup():
         "login_welcome_title": "Welcome back.",
         "login_welcome_body": "Pick up where you left off. Your progress syncs across every device you sign in on.",
         "wrong_answer_flash_ms": 1500,
+        "lesson_drift_amount": 1.0,
+        "lesson_mouse_force": 0.75,
+        "lesson_mouse_radius": 1.8,
         "stripe_secret_key": "",
     }
     if not cms:

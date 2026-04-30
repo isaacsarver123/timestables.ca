@@ -494,6 +494,32 @@ function CmsTab() {
           How long the green "Answer was X" card stays on screen after a wrong typed
           answer in Quick-Fire, Streak, Boss and Daily. Default 3000ms.
         </div>
+        <Field
+          label="Lesson dot drift amount"
+          type="number"
+          value={doc.lesson_drift_amount ?? 1.0}
+          onChange={(v) => set("lesson_drift_amount", parseFloat(v) || 0)}
+          testid="cms-lesson-drift-amount"
+        />
+        <Field
+          label="Lesson dot mouse force"
+          type="number"
+          value={doc.lesson_mouse_force ?? 0.75}
+          onChange={(v) => set("lesson_mouse_force", parseFloat(v) || 0)}
+          testid="cms-lesson-mouse-force"
+        />
+        <Field
+          label="Lesson dot mouse radius"
+          type="number"
+          value={doc.lesson_mouse_radius ?? 1.8}
+          onChange={(v) => set("lesson_mouse_radius", parseFloat(v) || 0)}
+          testid="cms-lesson-mouse-radius"
+        />
+        <div className="text-[11px] text-muted">
+          Tune the subtle movement in lesson dot questions. Drift controls idle float,
+          mouse force controls how much dots react, and mouse radius controls how far
+          from the cursor that effect reaches.
+        </div>
       </CmsSection>
 
       <CmsSection title={<span className="flex items-center gap-2"><Tag size={12} /> Build / version</span>}>

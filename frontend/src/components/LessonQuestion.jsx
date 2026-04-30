@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, MoveHorizontal } from "lucide-react";
 import { sfx } from "@/lib/sound";
+import { getLessonMotionSettings, subscribeCms } from "@/lib/cms";
 
 function makeChoices(correct) {
   const set = new Set([correct]);
@@ -54,7 +55,7 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-function idleDrift(i, amp = 0.6) {
+function idleDrift(i, amp = 1.0) {
   const angleA = ((i * 47) % 360) * (Math.PI / 180);
   const angleB = angleA + 1.9;
   return {
@@ -70,7 +71,7 @@ const PUSH_FORCE = 0.75;
 const PUSH_RANGE_MULT = 1.8;
 
 // ── GroupedDots — `b` groups of `a` dots.
-function GroupedDots({ a, b }) {
+function GroupedDots({ a, b, motion }) {
   let rows = a, cols = b;
   if (rows > cols * 1.6) {
     [rows, cols] = [cols, rows];
@@ -106,8 +107,8 @@ function GroupedDots({ a, b }) {
         const row = i % rows;
         const cx = pad + col * colGap + inGap / 2;
         const cy = pad + row * inGap + inGap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, inGap * PUSH_RANGE_MULT, PUSH_FORCE);
-        const drift = idleDrift(i);
+        const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motion?.mouseRadius ?? PUSH_RANGE_MULT), motion?.mouseForce ?? PUSH_FORCE);
+        const drift = idleDrift(i, motion?.driftAmount ?? 1.0);
         return (
           <motion.g
             key={i}
@@ -135,7 +136,7 @@ function GroupedDots({ a, b }) {
 }
 
 // ── DotGrid — flat `rows × cols` grid
-function DotGrid({ a, b }) {
+function DotGrid({ a, b, motion }) {
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
@@ -166,8 +167,8 @@ function DotGrid({ a, b }) {
         const c = i % cols;
         const cx = pad + c * gap + gap / 2;
         const cy = pad + r * gap + gap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, gap * PUSH_RANGE_MULT, PUSH_FORCE);
-        const drift = idleDrift(i);
+        const { dx, dy } = repulsion(cx, cy, pointer, gap * (motion?.mouseRadius ?? PUSH_RANGE_MULT), motion?.mouseForce ?? PUSH_FORCE);
+        const drift = idleDrift(i, motion?.driftAmount ?? 1.0);
         return (
           <motion.g
             key={i}
@@ -262,7 +263,7 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
   );
 }
 
-function DivGroups({ dividend, divisor }) {
+function DivGroups({ dividend, divisor, motion }) {
   const cols = divisor;
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 3.25 : 4;
@@ -273,7 +274,7 @@ function DivGroups({ dividend, divisor }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
       {Array.from({ length: dividend }).map((_, i) => {
-        const drift = idleDrift(i, 0.45);
+        const drift = idleDrift(i, (motion?.driftAmount ?? 1.0) * 0.75);
         return (
           <motion.g
             key={i}
@@ -314,6 +315,7 @@ function BigNumber({ a, b, symbol }) {
 export default function LessonQuestion({ question, onAnswer }) {
   const [selected, setSelected] = useState(null);
   const [committed, setCommitted] = useState(false);
+  const [motion, setMotion] = useState(() => getLessonMotionSettings());
   const advanceTimer = useRef(null);
   const questionId = `${question.key ?? "no-key"}:${question.op}:${question.a}:${question.b}:${question.answer}`;
   const choices = useMemo(() => makeChoices(question.answer), [question.answer]);
@@ -331,6 +333,14 @@ export default function LessonQuestion({ question, onAnswer }) {
   useEffect(() => () => {
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
   }, []);
+
+  useEffect(() => subscribeCms((doc) => {
+    setMotion({
+      driftAmount: Number(doc?.lesson_drift_amount ?? getLessonMotionSettings().driftAmount),
+      mouseForce: Number(doc?.lesson_mouse_force ?? getLessonMotionSettings().mouseForce),
+      mouseRadius: Number(doc?.lesson_mouse_radius ?? getLessonMotionSettings().mouseRadius),
+    });
+  }), []);
 
   const isCorrect = selected === question.answer;
 
@@ -361,14 +371,14 @@ export default function LessonQuestion({ question, onAnswer }) {
   };
 
   let visual;
-  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} />;
-  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} />;
+  if (kind === "groupedDots")    visual = <GroupedDots a={question.a} b={question.b} motion={motion} />;
+  else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} motion={motion} />;
   else if (kind === "numberLine") visual = (
     <DraggableNumberLine dividend={question.a} divisor={question.b}
       locked={committed}
       onPick={(v) => { if (!committed) { setSelected(v); } }} />
   );
-  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} />;
+  else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} motion={motion} />;
   else visual = <BigNumber a={question.a} b={question.b} symbol={question.op} />;
 
   // Slot colour: neutral while selecting, green/rose once committed.

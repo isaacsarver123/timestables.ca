@@ -5,6 +5,11 @@ import { api } from "./api";
 
 const KEY = "tt_cms_cache_v1";
 const DEFAULT_FLASH_MS = 3000;
+const DEFAULT_LESSON_MOTION = {
+  driftAmount: 1.0,
+  mouseForce: 0.75,
+  mouseRadius: 1.8,
+};
 
 let cache = {};
 try {
@@ -36,6 +41,17 @@ export function getCmsCached() {
 export function getFlashMs() {
   const v = parseInt(cache?.wrong_answer_flash_ms, 10);
   return Number.isFinite(v) && v > 0 ? v : DEFAULT_FLASH_MS;
+}
+
+export function getLessonMotionSettings() {
+  const driftAmount = Number(cache?.lesson_drift_amount);
+  const mouseForce = Number(cache?.lesson_mouse_force);
+  const mouseRadius = Number(cache?.lesson_mouse_radius);
+  return {
+    driftAmount: Number.isFinite(driftAmount) ? driftAmount : DEFAULT_LESSON_MOTION.driftAmount,
+    mouseForce: Number.isFinite(mouseForce) ? mouseForce : DEFAULT_LESSON_MOTION.mouseForce,
+    mouseRadius: Number.isFinite(mouseRadius) ? mouseRadius : DEFAULT_LESSON_MOTION.mouseRadius,
+  };
 }
 
 export function subscribeCms(fn) {
