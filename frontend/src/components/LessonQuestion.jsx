@@ -282,13 +282,23 @@ function BigNumber({ a, b, symbol }) {
 export default function LessonQuestion({ question, onAnswer }) {
   const [selected, setSelected] = useState(null);
   const [committed, setCommitted] = useState(false);
-  const choices = useMemo(() => makeChoices(question.answer), [question.key]);
-  const kind = useMemo(() => visualKindFor(question), [question.key]);
+  const advanceTimer = useRef(null);
+  const questionId = `${question.key ?? "no-key"}:${question.op}:${question.a}:${question.b}:${question.answer}`;
+  const choices = useMemo(() => makeChoices(question.answer), [question.answer]);
+  const kind = useMemo(() => visualKindFor(question), [question.a, question.b, question.op, question.key]);
 
   useEffect(() => {
     setSelected(null);
     setCommitted(false);
-  }, [question.key]);
+    if (advanceTimer.current) {
+      clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+  }, [questionId]);
+
+  useEffect(() => () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+  }, []);
 
   const isCorrect = selected === question.answer;
 
@@ -303,8 +313,16 @@ export default function LessonQuestion({ question, onAnswer }) {
     if (isCorrect) {
       sfx.correct();
       sfx.coin();
-      setTimeout(() => onAnswer(true, selected), 900);
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+      advanceTimer.current = setTimeout(() => {
+        advanceTimer.current = null;
+        onAnswer(true, selected);
+      }, 900);
     } else {
+      if (advanceTimer.current) {
+        clearTimeout(advanceTimer.current);
+        advanceTimer.current = null;
+      }
       sfx.wrong();
       onAnswer(false, selected);
     }

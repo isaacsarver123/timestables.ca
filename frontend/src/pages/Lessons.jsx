@@ -64,18 +64,21 @@ function saveProgress(p) {
 }
 
 // Build a question from a lesson spec.
-function questionFromSpec(spec) {
+function questionFromSpec(spec, lastKey) {
   // For "mixed", randomly pick mul or div per question.
   let op = spec.op === "mixed" ? (Math.random() < 0.5 ? "mul" : "div") : spec.op;
   const minFactor = spec.minFactor ?? (spec.isLong ? 11 : 2);
   const maxFactor = spec.isLong ? Math.max(spec.maxFactor, 19) : spec.maxFactor;
-  return generateQuestion(spec.tables, { minFactor, maxFactor, op });
+  return generateQuestion(spec.tables, { minFactor, maxFactor, op, lastKey });
 }
 
 function buildRunFromSpec(spec) {
   const out = [];
+  let lastKey = null;
   for (let i = 0; i < TOTAL; i++) {
-    out.push({ ...questionFromSpec(spec), isHard: spec.isLong || (spec.maxFactor >= 14) });
+    const nextQ = questionFromSpec(spec, lastKey);
+    out.push({ ...nextQ, isHard: spec.isLong || (spec.maxFactor >= 14) });
+    lastKey = nextQ.key;
   }
   // Mark the last 3 as the "hard dots".
   const hardIdx = new Set();
@@ -94,12 +97,14 @@ function buildCustomRun(selectedTopics, diffKey) {
   });
   if (ops.length === 0) ops.push({ op: "mul", isLong: false });
   const out = [];
+  let lastKey = null;
   for (let i = 0; i < TOTAL; i++) {
     const pick = ops[i % ops.length];
     const minFactor = pick.isLong ? 11 : 2;
     const maxFactor = pick.isLong ? Math.max(cfg.maxFactor, 19) : cfg.maxFactor;
-    const q = generateQuestion(cfg.tables, { minFactor, maxFactor, op: pick.op });
+    const q = generateQuestion(cfg.tables, { minFactor, maxFactor, op: pick.op, lastKey });
     out.push({ ...q, isHard: pick.isLong });
+    lastKey = q.key;
   }
   const hardIdx = new Set();
   for (let i = TOTAL - 1; hardIdx.size < HARD_DOTS && i >= 0; i--) hardIdx.add(i);
@@ -115,11 +120,14 @@ function buildEndlessRun() {
     { op: "div", isLong: true },
   ];
   const out = [];
+  let lastKey = null;
   for (let i = 0; i < TOTAL; i++) {
     const pick = ops[Math.floor(Math.random() * ops.length)];
     const minFactor = pick.isLong ? 11 : 2;
     const maxFactor = pick.isLong ? 25 : 19;
-    out.push({ ...generateQuestion([6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], { minFactor, maxFactor, op: pick.op }), isHard: true });
+    const q = generateQuestion([6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], { minFactor, maxFactor, op: pick.op, lastKey });
+    out.push({ ...q, isHard: true });
+    lastKey = q.key;
   }
   return out;
 }
@@ -602,6 +610,7 @@ export default function Lessons() {
         {status !== "reviewing" && q && (
           <div className="flex-1 min-h-0 flex flex-col">
             <LessonQuestion
+              key={`${idx}-${q?.key ?? `${q?.op}-${q?.a}-${q?.b}-${q?.answer}`}`}
               question={q}
               onAnswer={submitChoice}
               status={status}
