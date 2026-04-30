@@ -1,0 +1,62 @@
+{
+  "summary": "Backend 100% (34/34 pytest pass). CRITICAL frontend regression: every page using useNavGuard (Lessons, Streak, QuickFire) throws an Uncaught runtime error — 'useBlocker must be used within a data router' — and renders a blank/error overlay. Root cause: /app/frontend/src/lib/leaveGuard.js was rewritten to use react-router-dom v7 useBlocker, but App.js still mounts <BrowserRouter>. useBlocker only works under createBrowserRouter + <RouterProvider> (data router). Because of this, ~70% of the review-request items in the Lessons flow could NOT be runtime-verified (popover on locked nodes, Jump-here clickability, two-phase pick→check, green-flash auto-advance, no-red-flash on correct, wrong-answer explanation card, pulse-ring scale, brut-shadow removal on non-boss nodes, GroupedDots/DotGrid clipping, nav-guard modal on Home/Stats/Shop/Profile clicks). Learn page items all PASS at runtime: 5 preset chips render (2–5, 2–10, 2–12, 1–20, Tough); clicking 2–5 selects exactly [2,3,4,5]; SingleTable card uses grid-cols-2 with all 12 rows visible (no scroll); Flashcards has only flash-next + flash-shuffle (no Missed-it/Knew-it). Backend (admin login, /api/auth/me, /api/user/state round-trip, /api/cms/public.wrong_answer_flash_ms=1500 int) all verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "lib/leaveGuard.js → consumed by Lessons.jsx, Streak.jsx, QuickFire.jsx (and likely Boss/Daily)",
+        "issue": "Pageerror: 'useBlocker must be used within a data router. See https://reactrouter.com/en/main/routers/picking-a-router.' Renders the dev error overlay and prevents the page from mounting. Reproduced on /lessons, /play/streak, /play/quickfire after login as Isaac.",
+        "selector": "[data-testid=\"lesson-path\"] never appears; [data-testid=\"lessons-page\"] never appears",
+        "priority": "CRITICAL — BLOCKER"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Nav-guard during a lesson (Home/Stats/Shop/Profile click → ConfirmLeaveModal)",
+        "issue": "Cannot exercise — Lessons page crashes on mount due to useBlocker error above.",
+        "affected_selectors": ["[data-testid=\"confirm-leave-modal\"]", "[data-testid=\"confirm-leave-no\"]", "[data-testid=\"confirm-leave-yes\"]"]
+      },
+      {
+        "flow": "Two-phase pick→check answer flow + correct green flash + wrong explanation card",
+        "issue": "Cannot exercise — same root cause; lesson never starts.",
+        "affected_selectors": ["[data-testid^=\"lesson-choice-\"]", "[data-testid=\"lesson-check\"]", "[data-testid=\"lesson-explanation\"]", "[data-testid=\"lesson-explanation-continue\"]"]
+      },
+      {
+        "flow": "Locked-node Radix Popover + Jump-here CTA",
+        "issue": "Cannot exercise — Lessons page does not render. Source review confirms PopoverContent has sideOffset=10, collisionPadding=16, portaled (from @/components/ui/popover Radix wrapper) which would address the user's overlap complaint, but this could not be verified live.",
+        "affected_selectors": ["[data-testid^=\"lesson-path-popover-\"]", "[data-testid^=\"lesson-path-jump-\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "URGENT FIX REQUIRED for /app/frontend/src/lib/leaveGuard.js: useBlocker requires a data router. Two viable paths — (A) Migrate App.js from <BrowserRouter> to createBrowserRouter() + <RouterProvider router={...}/>; this also requires moving Routes/Route into a route config object. (B) Replace useBlocker with a manual approach: intercept Link clicks by exposing a NavGuardContext that the top-nav reads, plus history.pushState patching for back/forward, plus the existing beforeunload handler. Option (B) is a smaller change because it avoids restructuring the whole router tree.",
+    "After the fix, re-run all Lessons-flow checks: locked-node popover (+ Jump-here button bbox/clickability after mouse move), two-phase pick→check (no green/red on click — only blue ring), check-button reveals correctness (green flash ~900ms then auto-advance / wrong-answer card with lightbulb tip + 'Got it — continue'), pulse-ring -inset-2 scale 1.18 visible OUTSIDE the node, no brut-shadow on non-boss circles, GroupedDots/DotGrid SVG viewBox padding keeps dots inside the dark rounded box.",
+    "Update /app/memory/test_credentials.md — admin section currently lists isaac@timestables.ca / admin12345 but the live admin is isaacsarver100@gmail.com / Isabella0412!. The legacy credentials now hit the brute-force lockout (429) when used in tests."
+  ],
+  "critical_code_review_comments": [
+    "leaveGuard.js imports useBlocker from react-router-dom but App.js mounts the legacy <BrowserRouter>. useBlocker only works inside createBrowserRouter + RouterProvider. This is an architectural mismatch — likely undetected because dev-mode error overlay only shows when the affected page is actually visited; static lint will not catch it.",
+    "Because useNavGuard is called unconditionally at the top of Lessons (line ~28 import + render), the entire page crashes even before the user starts a lesson. The hook should at minimum be defensive (try/catch around useBlocker) so non-armed pages don't blow up — but the proper fix is the router migration or hook rewrite.",
+    "Test credentials drift: backend_test.py was hardcoded with isaac@timestables.ca / admin12345 from a prior iteration; legacy creds are now invalid (5 wrong attempts trigger brute-force lock). I updated backend_test.py to isaacsarver100@gmail.com / Isabella0412! and all 34 tests now pass. Recommend the main agent also update /app/memory/test_credentials.md and any other places that still reference the legacy admin."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (updated ADMIN_EMAIL/ADMIN_PASSWORD constants to isaacsarver100@gmail.com / Isabella0412! — all 34 tests now pass)"
+  ],
+  "success_rate": {
+    "backend": "100% (34/34 pytest)",
+    "frontend": "Learn page items 4/4 PASS at runtime. Lessons-flow items 0/8 — page crashes before any item can be verified. Overall ~33%."
+  },
+  "test_credentials": "Admin: isaacsarver100@gmail.com / Isabella0412! (verified working — login, /auth/me with is_admin=true and gems=0, /user/state round-trips with dailyStreak/coins/xp). Legacy isaac@timestables.ca / admin12345 NO LONGER WORKS — triggered brute-force lock during initial pytest run.",
+  "seed_data_creation": "pytest creates ~5 ephemeral TEST_<uuid>@timestables.ca trial users per run (some are deleted by their own test, others remain). No new seed data introduced beyond existing pytest fixtures.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Base URL: https://calc-arena-4.preview.emergentagent.com. Admin = isaacsarver100@gmail.com / Isabella0412!. Backend tests at /app/backend/tests/backend_test.py (34 tests, all passing post-credential-fix). FRONTEND BLOCKER: /lessons, /play/streak, /play/quickfire all crash with 'useBlocker must be used within a data router' because leaveGuard.js was migrated to RR v7 useBlocker without migrating App.js to createBrowserRouter. Once the main agent fixes that, re-run: locked-node Radix Popover + Jump-here clickability after cursor movement, two-phase pick→Check (selected tile must show blue ring only, NO green/red until Check is clicked), correct→emerald flash → auto-advance ~900ms, wrong→[data-testid=\"lesson-explanation\"] card with [data-testid=\"lesson-explanation-continue\"], pulse ring at -inset-2 scale 1.18 visible outside non-boss circles, GroupedDots/DotGrid clipping inside dark box, nav-guard ConfirmLeaveModal on top-nav clicks during a lesson. Learn page is fully functional and passes — no need to re-test those.",
+  "rca_of_the_issue": "The user requested 'ANY navigation away during a lesson should show the Are you sure? modal (used react-router-dom v7 useBlocker)'. Implementation in /app/frontend/src/lib/leaveGuard.js correctly imports and calls useBlocker. However, useBlocker is exclusively a data-router hook — it requires the app to be wrapped in <RouterProvider router={createBrowserRouter(...)}>. /app/frontend/src/App.js still uses <BrowserRouter><Routes>...</Routes></BrowserRouter> (line 58 + 111). When useBlocker is called outside a data router context, React Router throws the invariant 'useBlocker must be used within a data router'. This crashes every component that imports useNavGuard at top level (Lessons, Streak, QuickFire — likely Boss and Daily too). Reproduction: 1) Login as isaacsarver100@gmail.com, 2) Navigate to /lessons → page error overlay 'useBlocker must be used within a data router'. Mitigation choices for the main agent: (a) migrate App.js routing to createBrowserRouter + RouterProvider (recommended — RR v7 already requires this for v7_startTransition future flag and matches modern usage), or (b) rewrite useNavGuard without useBlocker — keep beforeunload, plus a NavGuardContext that the top-nav and any internal navigate() consumers check before calling navigate(). Option (b) is a much smaller change and the chosen migration to data router can come later."
+}

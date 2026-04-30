@@ -14,8 +14,8 @@ BASE_URL = os.environ.get(
     "https://calc-arena-4.preview.emergentagent.com",
 ).rstrip("/")
 
-ADMIN_EMAIL = "isaac@timestables.ca"
-ADMIN_PASSWORD = "admin12345"
+ADMIN_EMAIL = "isaacsarver100@gmail.com"
+ADMIN_PASSWORD = "Isabella0412!"
 
 
 def _spoofed_ip():

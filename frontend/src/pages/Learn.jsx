@@ -18,6 +18,14 @@ const ALL = Array.from({ length: 20 }, (_, i) => i + 1);
 const ROWS = Array.from({ length: 12 }, (_, i) => i + 1);
 const DRILL_LEN = 10;
 
+const PRESETS = [
+  { key: "2-5",   label: "2–5",    tables: [2, 3, 4, 5] },
+  { key: "2-10",  label: "2–10",   tables: [2, 3, 4, 5, 6, 7, 8, 9, 10] },
+  { key: "2-12",  label: "2–12",   tables: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
+  { key: "1-20",  label: "1–20",   tables: ALL },
+  { key: "tough", label: "Tough",  tables: [6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 19] },
+];
+
 const TABS = [
   { key: "table", label: "Table", Icon: BookText },
   { key: "flash", label: "Flashcards", Icon: Layers },
@@ -62,12 +70,35 @@ const Learn = () => {
       <div className="surface brut-border p-4">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">
-            Pick tables (1–20) — tap to toggle, hold-pick a single by selecting just one
+            Pick tables (1–20) — tap to toggle, double-click to select only this
           </div>
           <div className="text-xs font-mono text-muted">
             {tables.length} selected
           </div>
         </div>
+
+        {/* Quick range presets */}
+        <div className="flex flex-wrap gap-1.5 mb-3" data-testid="learn-presets">
+          {PRESETS.map((p) => {
+            const active = tables.length === p.tables.length &&
+              p.tables.every((x) => tables.includes(x));
+            return (
+              <button
+                key={p.key}
+                onClick={() => setTables([...p.tables])}
+                data-testid={`learn-preset-${p.key}`}
+                className={`brut-border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                  active
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                    : "surface text-fg hover:surface-2"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="grid grid-cols-10 gap-1.5 sm:gap-2" data-testid="learn-table-picker">
           {ALL.map((x) => (
             <button
@@ -141,7 +172,9 @@ const TableView = ({ tables }) => {
   }
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Tables grid — wide so users don't have to scroll up & down.
+          Each SingleTable is compact and uses a 2-column 6-row inside. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {tables.map((n) => (
           <SingleTable key={n} n={n} compact />
         ))}
@@ -166,21 +199,22 @@ const TableView = ({ tables }) => {
 };
 
 const SingleTable = ({ n, compact = false }) => (
-  <div className="surface brut-border p-5" data-testid={`learn-table-list-${n}`}>
-    <div className="flex items-baseline gap-3 mb-3">
+  <div className="surface brut-border p-4" data-testid={`learn-table-list-${n}`}>
+    <div className="flex items-baseline gap-3 mb-2.5">
       <div className={`font-mono font-black ${compact ? "text-2xl" : "text-4xl"} text-fg`}>×{n}</div>
       <div className="text-[10px] uppercase tracking-[0.2em] text-muted font-medium">table</div>
     </div>
-    <div className={`grid ${compact ? "grid-cols-2" : "grid-cols-2"} gap-1.5`}>
+    {/* 2 cols × 6 rows fits all 12 rows on one short card — no scrolling */}
+    <div className="grid grid-cols-2 gap-x-2 gap-y-1">
       {ROWS.map((r) => (
         <div
           key={r}
-          className="brut-border-soft px-3 py-1.5 flex items-center justify-between font-mono text-fg"
+          className="brut-border-soft px-2.5 py-1 flex items-center justify-between font-mono text-fg"
         >
-          <span className="text-sm">
+          <span className="text-[13px]">
             {r} × {n}
           </span>
-          <span className="text-base font-bold tabular-nums">{r * n}</span>
+          <span className="text-sm font-bold tabular-nums">{r * n}</span>
         </div>
       ))}
     </div>
@@ -228,28 +262,19 @@ const FlashView = ({ tables }) => {
   const [cards, setCards] = useState(() => flashcardSet(tables));
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [knew, setKnew] = useState(0);
-  const [missed, setMissed] = useState(0);
   const done = idx >= cards.length;
 
   useEffect(() => {
     setCards(flashcardSet(tables));
     setIdx(0);
     setFlipped(false);
-    setKnew(0);
-    setMissed(0);
   }, [tables]);
 
   const card = cards[idx];
 
-  const mark = (knownIt) => {
-    if (knownIt) {
-      setKnew((k) => k + 1);
-      addCoinsAndXp(1, 2);
-      sfx.coin();
-    } else {
-      setMissed((m) => m + 1);
-    }
+  const next = () => {
+    addCoinsAndXp(1, 2);
+    sfx.coin();
     setIdx((i) => i + 1);
     setFlipped(false);
   };
@@ -258,8 +283,6 @@ const FlashView = ({ tables }) => {
     setCards(flashcardSet(tables));
     setIdx(0);
     setFlipped(false);
-    setKnew(0);
-    setMissed(0);
   };
 
   if (done) {
@@ -269,11 +292,11 @@ const FlashView = ({ tables }) => {
           Set complete
         </div>
         <h2 className="text-4xl font-black tracking-tighter mt-1 text-fg">
-          {knew}
-          <span className="text-muted">/{cards.length}</span>
+          {cards.length}
+          <span className="text-muted"> cards</span>
         </h2>
         <p className="text-sm text-muted mt-2">
-          Knew: {knew} · Missed: {missed}
+          Nice — pick a different set of tables or reshuffle for another round.
         </p>
         <button
           onClick={restart}
@@ -292,10 +315,13 @@ const FlashView = ({ tables }) => {
         <span className="text-fg font-bold">
           Card {idx + 1} / {cards.length}
         </span>
-        <span className="text-muted">
-          Knew: <span className="text-fg font-bold">{knew}</span> · Missed:{" "}
-          <span className="text-fg font-bold">{missed}</span>
-        </span>
+        <button
+          onClick={restart}
+          className="text-muted hover:text-fg text-xs uppercase tracking-wider font-bold"
+          data-testid="flash-shuffle"
+        >
+          Shuffle
+        </button>
       </div>
 
       {/* 3D flip card */}
@@ -348,20 +374,13 @@ const FlashView = ({ tables }) => {
         </motion.div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2.5">
+      <div className="mt-4">
         <button
-          onClick={() => mark(false)}
-          data-testid="flash-missed"
-          className="brut-border brut-shadow-sm p-3 bg-rose-500 text-white font-bold uppercase tracking-wider text-sm hover:bg-rose-600 hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none transition-all"
+          onClick={next}
+          data-testid="flash-next"
+          className="w-full brut-border brut-shadow-sm p-3 bg-emerald-500 text-white font-bold uppercase tracking-wider text-sm hover:bg-emerald-600 hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none transition-all"
         >
-          Missed it
-        </button>
-        <button
-          onClick={() => mark(true)}
-          data-testid="flash-knew"
-          className="brut-border brut-shadow-sm p-3 bg-emerald-500 text-white font-bold uppercase tracking-wider text-sm hover:bg-emerald-600 hover:-translate-y-0.5 active:translate-y-0.5 active:brut-shadow-none transition-all"
-        >
-          Knew it
+          Next
         </button>
       </div>
     </div>

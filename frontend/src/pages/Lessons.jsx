@@ -299,28 +299,26 @@ export default function Lessons() {
   }
 
   // ── submit / advance ──────────────────────────────────────────────────────
-  // Path/custom lesson UI is multiple-choice (LessonQuestion). Test mode keeps
-  // typed input via the original Question component. Both flow through here.
-  const submitChoice = (n) => {
-    // LessonQuestion now defers onAnswer until the user clicks Continue, so
-    // by the time we get here it's a deliberate commit. No status gating.
-    if (n === q.answer) onCorrect();
-    else onWrong(true);
+  // Path/custom lesson UI is multiple-choice (LessonQuestion). It fires
+  // onAnswer(true|false, chosen) only AFTER the user clicks Check.
+  // Correct: brief green flash inside LessonQuestion, then we advance.
+  // Wrong: we immediately show the explanation card, user reads it and
+  // clicks "Got it — continue" to advance.
+  const submitChoice = (isCorrect, _chosen) => {
+    // LessonQuestion already played sfx at check-time. Skip sfx here.
+    if (isCorrect) onCorrect(false);
+    else onWrong(false);
   };
   const submit = () => {
     if (status !== "idle") return;
     if (value === "" || value === "-") return;
     const guess = parseInt(value, 10);
-    if (guess === q.answer) onCorrect();
+    if (guess === q.answer) onCorrect(true);
     else onWrong(true);
   };
 
-  // The Continue button in LessonQuestion is the user's commit signal — by
-  // the time onCorrect / onWrong run, the user has already SEEN the answer
-  // flash locally and clicked Continue. So we update bookkeeping and advance
-  // immediately, no setTimeout, no separate review card.
-  const onCorrect = () => {
-    sfx.correct(); sfx.coin();
+  const onCorrect = (playSfx = true) => {
+    if (playSfx) { sfx.correct(); sfx.coin(); }
     setCorrect((c) => c + 1);
     if (q.isHard) setHardCorrect((c) => c + 1);
     addCoinsAndXp(1, 3);
@@ -328,11 +326,10 @@ export default function Lessons() {
     advance();
   };
 
-  const onWrong = (typed = false) => {
-    if (typed) sfx.wrong();
+  const onWrong = (playSfx = true) => {
+    if (playSfx) sfx.wrong();
     recordAnswer({ a: q.a, b: q.b, op: q.op, correct: false, ms: 0 });
     if (phase === "test") {
-      // Test mode: lose a heart, advance immediately (no explanation card).
       setStatus("wrong");
       setHearts((h) => {
         const nh = h - 1;
@@ -344,9 +341,8 @@ export default function Lessons() {
         return nh;
       });
     } else {
-      // Path/custom lesson — LessonQuestion already showed the correct answer
-      // before the user clicked Continue, so just advance.
-      advance();
+      setExplanation(explain(q));
+      setStatus("reviewing");
     }
   };
 
@@ -1024,13 +1020,13 @@ function LessonPath({
 function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
   const [open, setOpen] = useState(false);
 
-  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border brut-shadow grid place-items-center font-black text-2xl transition-all ${
+  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border grid place-items-center font-black text-2xl transition-all ${
     done
       ? `${unit.accent} text-zinc-950 hover:-translate-y-0.5`
       : unlocked
       ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
       : "surface-2 text-muted hover:-translate-y-0.5"
-  } ${lesson.boss ? "rounded-md" : "rounded-full"}`;
+  } ${lesson.boss ? "rounded-md brut-shadow-sm" : "rounded-full"}`;
 
   const innerIcon = done ? (
     <CheckCircle2 size={26} strokeWidth={3} />

@@ -1,7 +1,10 @@
 // Brilliant-style in-lesson UI. Compact, deterministic, fits a single viewport.
+// Two-phase answer flow: tap a tile to SELECT (blue), then tap CHECK to commit.
+// Parent handles the wrong-answer explanation card.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, MoveHorizontal } from "lucide-react";
+import { sfx } from "@/lib/sound";
 
 function makeChoices(correct) {
   const set = new Set([correct]);
@@ -35,15 +38,13 @@ function visualKindFor(q) {
   }
   if (q.op === "÷") {
     if (q.a > 80) return "bigNumber";
-    // Only show the slider for the simplest divisions (small dividend AND
-    // small divisor). For anything bigger or long-division, use group dots.
     if (q.a <= 20 && q.b <= 5) return "numberLine";
     return "divGroups";
   }
   return "bigNumber";
 }
 
-// Repulsion helper — gentle, tightened ranges
+// Gentle repulsion — about 1/4 of the previous strength.
 function repulsion(cx, cy, pointer, range, force) {
   if (!pointer) return { dx: 0, dy: 0 };
   const ddx = cx - pointer.x, ddy = cy - pointer.y;
@@ -53,11 +54,11 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-// ── GroupedDots — `b` groups of `a` dots. Auto-transposes when one factor
-// is much larger than the other so the layout always stays close to the 5/4
-// canvas aspect (no clipping). Dots scale down for higher counts.
+const PUSH_FORCE = 0.6;
+const PUSH_RANGE_MULT = 1.0;
+
+// ── GroupedDots — `b` groups of `a` dots.
 function GroupedDots({ a, b }) {
-  // Transpose when rows would be much taller than cols, to fit a 5/4 canvas.
   let rows = a, cols = b;
   if (rows > cols * 1.6) {
     [rows, cols] = [cols, rows];
@@ -66,8 +67,9 @@ function GroupedDots({ a, b }) {
   const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 5 : 7;
   const inGap = dotR * 2 + 6;
   const colGap = inGap + 12;
-  const W = (cols - 1) * colGap + inGap;
-  const H = rows * inGap;
+  const pad = dotR + 4;                       // keep dots + repulsion inside viewBox
+  const W = (cols - 1) * colGap + inGap + pad * 2;
+  const H = rows * inGap + pad * 2;
 
   const svgRef = useRef(null);
   const [pointer, setPointer] = useState(null);
@@ -90,9 +92,9 @@ function GroupedDots({ a, b }) {
       {Array.from({ length: total }).map((_, i) => {
         const col = Math.floor(i / rows);
         const row = i % rows;
-        const cx = col * colGap + inGap / 2;
-        const cy = row * inGap + inGap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, inGap * 1.6, 2.5);
+        const cx = pad + col * colGap + inGap / 2;
+        const cy = pad + row * inGap + inGap / 2;
+        const { dx, dy } = repulsion(cx, cy, pointer, inGap * PUSH_RANGE_MULT, PUSH_FORCE);
         return (
           <motion.g
             key={i}
@@ -114,14 +116,16 @@ function GroupedDots({ a, b }) {
   );
 }
 
-// ── DotGrid — flat `rows × cols` grid (auto-transposes for tall layouts) ─
+// ── DotGrid — flat `rows × cols` grid
 function DotGrid({ a, b }) {
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
   const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 5 : 7;
   const gap = dotR * 2 + 8;
-  const W = cols * gap, H = rows * gap;
+  const pad = dotR + 4;
+  const W = cols * gap + pad * 2;
+  const H = rows * gap + pad * 2;
   const svgRef = useRef(null);
   const [pointer, setPointer] = useState(null);
   const onMove = (e) => {
@@ -142,9 +146,9 @@ function DotGrid({ a, b }) {
       {Array.from({ length: total }).map((_, i) => {
         const r = Math.floor(i / cols);
         const c = i % cols;
-        const cx = c * gap + gap / 2;
-        const cy = r * gap + gap / 2;
-        const { dx, dy } = repulsion(cx, cy, pointer, gap * 1.6, 2.5);
+        const cx = pad + c * gap + gap / 2;
+        const cy = pad + r * gap + gap / 2;
+        const { dx, dy } = repulsion(cx, cy, pointer, gap * PUSH_RANGE_MULT, PUSH_FORCE);
         return (
           <motion.g
             key={i}
@@ -166,7 +170,7 @@ function DotGrid({ a, b }) {
   );
 }
 
-// ── Draggable number-line ─────────────────────────────────────────────────
+// ── Draggable number-line
 function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
   const max = dividend;
   const W = 380, H = 90;
@@ -239,13 +243,16 @@ function DivGroups({ dividend, divisor }) {
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 4 : 5;
   const gap = dotR * 2 + 6;
-  const W = cols * gap, H = rows * gap;
+  const pad = dotR + 4;
+  const W = cols * gap + pad * 2;
+  const H = rows * gap + pad * 2;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
       {Array.from({ length: dividend }).map((_, i) => (
         <motion.circle
           key={i}
-          cx={(i % cols) * gap + gap / 2} cy={Math.floor(i / cols) * gap + gap / 2}
+          cx={pad + (i % cols) * gap + gap / 2}
+          cy={pad + Math.floor(i / cols) * gap + gap / 2}
           r={dotR} fill="#06b6d4"
           initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: i * 0.015, duration: 0.18 }}
@@ -266,29 +273,41 @@ function BigNumber({ a, b, symbol }) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
-export default function LessonQuestion({ question, onAnswer, status }) {
-  const [chosen, setChosen] = useState(null);
+// Flow:
+//   user taps a tile  → selected = n       (blue outline, not committed)
+//   user taps CHECK   → committed = true   (reveal colours, sfx plays)
+//       correct → brief green flash, ~900ms later call onAnswer(true)
+//       wrong   → red flash + highlight the correct tile, call onAnswer(false)
+// The parent is responsible for whatever comes next (explanation card, next Q).
+export default function LessonQuestion({ question, onAnswer }) {
+  const [selected, setSelected] = useState(null);
+  const [committed, setCommitted] = useState(false);
   const choices = useMemo(() => makeChoices(question.answer), [question.key]);
   const kind = useMemo(() => visualKindFor(question), [question.key]);
-  // Reset chosen whenever the question changes — guard against stale state.
-  useEffect(() => { setChosen(null); }, [question.key]);
 
-  // LOCAL correctness — used so the slot/tile flash green/rose IMMEDIATELY,
-  // regardless of how fast the parent's `status` prop updates. Bulletproof
-  // against any race condition.
-  const localCorrect = chosen != null && chosen === question.answer;
-  const localResolved = chosen != null;
+  useEffect(() => {
+    setSelected(null);
+    setCommitted(false);
+  }, [question.key]);
 
-  const submit = (n) => {
-    if (chosen != null) return; // already answered locally — guard against double-submit
-    setChosen(n);
-    // Don't notify parent yet — wait for the user to click Continue. This
-    // prevents auto-advance and lets them dwell on the visualization.
+  const isCorrect = selected === question.answer;
+
+  const pick = (n) => {
+    if (committed) return;
+    setSelected(n);
   };
 
-  const handleContinue = () => {
-    if (chosen == null) return;
-    onAnswer(chosen);
+  const check = () => {
+    if (selected == null || committed) return;
+    setCommitted(true);
+    if (isCorrect) {
+      sfx.correct();
+      sfx.coin();
+      setTimeout(() => onAnswer(true, selected), 900);
+    } else {
+      sfx.wrong();
+      onAnswer(false, selected);
+    }
   };
 
   let visual;
@@ -296,15 +315,18 @@ export default function LessonQuestion({ question, onAnswer, status }) {
   else if (kind === "dotGrid")   visual = <DotGrid a={question.a} b={question.b} />;
   else if (kind === "numberLine") visual = (
     <DraggableNumberLine dividend={question.a} divisor={question.b}
-      locked={chosen != null || status !== "idle"} onPick={submit} />
+      locked={committed}
+      onPick={(v) => { if (!committed) { setSelected(v); } }} />
   );
   else if (kind === "divGroups") visual = <DivGroups dividend={question.a} divisor={question.b} />;
   else visual = <BigNumber a={question.a} b={question.b} symbol={question.op} />;
 
-  // Slot / tile colour driven by LOCAL state first, parent status second.
-  const slotColor = localResolved
-    ? (localCorrect ? "bg-emerald-500 text-white" : "bg-rose-500 text-white")
-    : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950";
+  // Slot colour: neutral while selecting, green/rose once committed.
+  const slotColor = committed
+    ? (isCorrect ? "bg-emerald-500 text-white" : "bg-rose-500 text-white")
+    : selected != null
+      ? "bg-blue-600 text-white"
+      : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950";
 
   return (
     <div className="flex flex-col w-full h-full min-h-0" data-testid="lesson-question-card">
@@ -323,18 +345,18 @@ export default function LessonQuestion({ question, onAnswer, status }) {
 
       <div className="brut-border-soft surface-2 rounded-md py-1.5 mb-2 grid place-items-center shrink-0" data-testid="lesson-answer-slot">
         <AnimatePresence mode="wait">
-          {chosen != null ? (
+          {selected != null ? (
             <motion.div
-              key={`${chosen}-${localCorrect}`}
+              key={`${selected}-${committed}-${isCorrect}`}
               initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: localCorrect ? [1, 1.18, 1] : 1, opacity: 1 }}
+              animate={{ scale: committed && isCorrect ? [1, 1.18, 1] : 1, opacity: 1 }}
               exit={{ scale: 0.6, opacity: 0 }}
-              transition={{ duration: localCorrect ? 0.45 : 0.18, ease: [0.34, 1.56, 0.64, 1] }}
+              transition={{ duration: committed && isCorrect ? 0.45 : 0.18, ease: [0.34, 1.56, 0.64, 1] }}
               className={`brut-border ${slotColor} px-4 py-1 font-mono font-black text-2xl tabular-nums rounded-md`}
             >
-              {chosen}
-              {localCorrect && <CheckCircle2 size={16} className="inline ml-1.5 -mt-1" />}
-              {!localCorrect && <XCircle size={16} className="inline ml-1.5 -mt-1" />}
+              {selected}
+              {committed && isCorrect && <CheckCircle2 size={16} className="inline ml-1.5 -mt-1" />}
+              {committed && !isCorrect && <XCircle size={16} className="inline ml-1.5 -mt-1" />}
             </motion.div>
           ) : (
             <motion.div
@@ -348,21 +370,31 @@ export default function LessonQuestion({ question, onAnswer, status }) {
 
       <div className="grid grid-cols-3 gap-2 shrink-0" data-testid="lesson-answer-choices">
         {choices.map((c) => {
-          const isPicked = chosen === c;
+          const isPicked = selected === c;
           const isCorrectChoice = c === question.answer;
-          let cls = "surface text-fg hover:-translate-y-0.5 hover:bg-blue-100 dark:hover:bg-blue-950/30";
-          if (localResolved && isPicked && localCorrect) cls = "bg-emerald-500 text-white";
-          else if (localResolved && isPicked && !localCorrect) cls = "bg-rose-500 text-white";
-          else if (localResolved && !localCorrect && isCorrectChoice) cls = "bg-emerald-500 text-white";
+          let cls;
+          if (!committed) {
+            cls = isPicked
+              ? "bg-blue-600 text-white ring-2 ring-blue-300"
+              : "surface text-fg hover:-translate-y-0.5 hover:bg-blue-100 dark:hover:bg-blue-950/30";
+          } else if (isPicked && isCorrect) {
+            cls = "bg-emerald-500 text-white";
+          } else if (isPicked && !isCorrect) {
+            cls = "bg-rose-500 text-white";
+          } else if (!isCorrect && isCorrectChoice) {
+            cls = "bg-emerald-500 text-white";
+          } else {
+            cls = "surface text-muted opacity-60";
+          }
           return (
             <motion.button
               key={c}
-              onClick={() => submit(c)}
-              disabled={localResolved}
+              onClick={() => pick(c)}
+              disabled={committed}
               data-testid={`lesson-answer-tile-${c}`}
               animate={
-                localResolved && isPicked && localCorrect ? { scale: [1, 1.08, 1] }
-                : localResolved && isPicked && !localCorrect ? { x: [0, -6, 6, -4, 4, 0] }
+                committed && isPicked && isCorrect ? { scale: [1, 1.08, 1] }
+                : committed && isPicked && !isCorrect ? { x: [0, -6, 6, -4, 4, 0] }
                 : { scale: 1, x: 0 }
               }
               transition={{ duration: 0.4 }}
@@ -374,28 +406,27 @@ export default function LessonQuestion({ question, onAnswer, status }) {
         })}
       </div>
 
-      {/* Continue button — appears once the user has picked an answer. They
-          must click this to advance, no auto-advance. */}
-      <AnimatePresence>
-        {localResolved && (
-          <motion.button
-            key="continue"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={handleContinue}
-            data-testid="lesson-continue"
-            className={`mt-2 w-full brut-border brut-shadow font-bold uppercase tracking-wider text-xs py-3 rounded-md transition-colors ${
-              localCorrect
-                ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                : "bg-rose-500 text-white hover:bg-rose-600"
-            }`}
-          >
-            {localCorrect ? "Continue" : "Got it — continue"}
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* CHECK button — committed state is owned by this component; parent
+          only hears the commit through onAnswer(). On a correct answer we
+          auto-advance after ~900ms so the user sees the green flash. */}
+      <div className="mt-2 shrink-0">
+        <button
+          onClick={check}
+          disabled={selected == null || committed}
+          data-testid="lesson-check"
+          className={`w-full brut-border brut-shadow font-bold uppercase tracking-wider text-xs py-3 rounded-md transition-colors ${
+            selected != null && !committed
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 hover:bg-blue-600 hover:text-white"
+              : committed && isCorrect
+                ? "bg-emerald-500 text-white"
+                : committed && !isCorrect
+                  ? "bg-rose-500 text-white"
+                  : "surface-2 text-muted cursor-not-allowed"
+          }`}
+        >
+          {!committed ? "Check" : isCorrect ? "Correct!" : "See why →"}
+        </button>
+      </div>
     </div>
   );
 }

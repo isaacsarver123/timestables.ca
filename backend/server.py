@@ -319,7 +319,7 @@ async def on_startup():
         "signup_pitch_b_body": "You only put a card in if you decide to keep going after 2 days. We'll never charge you by surprise.",
         "login_welcome_title": "Welcome back.",
         "login_welcome_body": "Pick up where you left off. Your progress syncs across every device you sign in on.",
-        "wrong_answer_flash_ms": 3000,
+        "wrong_answer_flash_ms": 1500,
         "stripe_secret_key": "",
     }
     if not cms:
@@ -335,6 +335,12 @@ async def on_startup():
             await db.cms.update_one(
                 {"_id": "site"},
                 {"$set": {"footer_text": cms_defaults["footer_text"], "app_version": cms_defaults["app_version"]}},
+            )
+        # Migrate old 3000ms flash default down to the new 1500ms default.
+        if int(cms.get("wrong_answer_flash_ms") or 0) in (3000,):
+            await db.cms.update_one(
+                {"_id": "site"},
+                {"$set": {"wrong_answer_flash_ms": 1500}},
             )
 
 

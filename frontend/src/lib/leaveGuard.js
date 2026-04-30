@@ -1,22 +1,31 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
 
 /**
  * useNavGuard
  * ------------------------------------------------------------------
- * Pages call `tryGo(path)` instead of `navigate(path)`. If `armed` is
- * true (i.e. the user is mid-game), navigation is held and a modal is
- * shown via `open`. `confirm()` performs the deferred nav, `cancel()`
- * dismisses it. Also wires `beforeunload` so closing the tab prompts.
+ * Blocks ANY React Router navigation (Link click, programmatic navigate,
+ * back/forward) while `armed` is true. Returns the state the caller
+ * needs to drive a confirmation modal.
  *
  *   const guard = useNavGuard(running);
- *   <button onClick={() => guard.tryGo('/')}>Home</button>
  *   <ConfirmLeaveModal open={guard.open} onCancel={guard.cancel} onConfirm={guard.confirm} />
+ *
+ * Existing in-page "Quit" buttons can still use `guard.tryGo(path)` — it
+ * falls through to the router-level blocker, which pops the same modal.
+ * Also wires `beforeunload` so closing the tab / reload prompts.
  */
 export const useNavGuard = (armed) => {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(null);
+  const [manualPending, setManualPending] = useState(null);
+  const [manualOpen, setManualOpen] = useState(false);
+
+  // Router-level blocker: intercepts any nav while `armed` is true.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!armed) return false;
+    // Don't block internal replaces to the same path.
+    return currentLocation.pathname !== nextLocation.pathname;
+  });
 
   useEffect(() => {
     if (!armed) return;
@@ -28,18 +37,40 @@ export const useNavGuard = (armed) => {
     return () => window.removeEventListener("beforeunload", handler);
   }, [armed]);
 
-  const tryGo = useCallback((path) => {
-    if (!armed) { navigate(path); return; }
-    setPending(path);
-    setOpen(true);
-  }, [armed, navigate]);
+  // Explicit "Quit" buttons inside the page keep using this. When `armed`
+  // is true, let the router blocker handle the modal — call navigate() and
+  // the blocker will intercept it.
+  const tryGo = useCallback(
+    (path) => {
+      if (!armed) {
+        navigate(path);
+        return;
+      }
+      setManualPending(path);
+      setManualOpen(true);
+    },
+    [armed, navigate]
+  );
 
-  const cancel = useCallback(() => { setOpen(false); setPending(null); }, []);
+  // Unified modal state — open if either the blocker tripped or tryGo fired.
+  const open = blocker.state === "blocked" || manualOpen;
+
+  const cancel = useCallback(() => {
+    if (blocker.state === "blocked") blocker.reset();
+    setManualOpen(false);
+    setManualPending(null);
+  }, [blocker]);
+
   const confirm = useCallback(() => {
-    setOpen(false);
-    if (pending) navigate(pending);
-    setPending(null);
-  }, [pending, navigate]);
+    if (blocker.state === "blocked") {
+      blocker.proceed();
+    } else if (manualPending) {
+      setManualOpen(false);
+      const p = manualPending;
+      setManualPending(null);
+      navigate(p);
+    }
+  }, [blocker, manualPending, navigate]);
 
   return { open, tryGo, cancel, confirm };
 };

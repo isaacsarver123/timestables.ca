@@ -206,7 +206,7 @@ export function generateSkipCounting(table, opts = {}) {
 }
 
 // Build a flashcard deck for a single table OR a list of tables.
-// Cards are shuffled when multiple tables are provided.
+// Cards are ALWAYS shuffled (even for a single table) so users get variety.
 export function flashcardSet(input) {
   const tables = Array.isArray(input) ? input : [input];
   const cards = [];
@@ -222,11 +222,11 @@ export function flashcardSet(input) {
       });
     }
   });
-  if (tables.length > 1) {
-    for (let i = cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [cards[i], cards[j]] = [cards[j], cards[i]];
-    }
+  // Always shuffle — a predictable 1..12 order is boring and encourages
+  // memorising by position instead of the math.
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
   }
   return cards;
 }
@@ -436,38 +436,48 @@ export function tableTips(n) {
       { kind: "rule", text: "Divisible by 6 ⇔ divisible by both 2 and 3." },
     ],
     7: [
-      { kind: "trick", text: "No clean shortcut — chain it: 7, 14, 21, 28, 35, 42, 49, 56, 63, 70." },
-      { kind: "anchor", text: "7×7 = 49 · 7×8 = 56 (\"5, 6, 7, 8\" → 56 = 7×8) · 7×11 = 77." },
-      { kind: "trick", text: "7×9 = 63 — \"six-three is seven-nine\"." },
+      { kind: "formula", text: "Split it as 7×n = 5×n + 2×n. Example: 7×8 = (5×8) + (2×8) = 40 + 16 = 56. The fives and twos are easy, so any 7-times table is just a small sum." },
+      { kind: "trick", text: "Think 7×n as (n×10 − 3×n). 7×6 = 60 − 18 = 42. Handy when the n you're multiplying by is close to 10." },
+      { kind: "anchor", text: "Lock in three anchors: 7×7 = 49, 7×8 = 56 (mnemonic: the digits go \"5, 6, 7, 8\" → 56 is seven-eights), and 7×11 = 77. Everything else is one step away from one of these." },
+      { kind: "pattern", text: "7×9 = 63 — the answer's digits (6 and 3) add to 9, matching the rule for any 9× fact. Good cross-check: whenever a 7-fact is also a 9-fact, the digit-sum rule catches slips." },
     ],
     8: [
-      { kind: "trick", text: "Triple-double: 8×n = 2 × 2 × 2 × n. (8×7 → 7 → 14 → 28 → 56)" },
-      { kind: "formula", text: "Or 8×n = 10×n − 2×n. (8×6 = 60 − 12 = 48)" },
-      { kind: "rule", text: "Divisible by 8 if the last three digits form a multiple of 8." },
+      { kind: "trick", text: "Triple-double: 8×n = n doubled three times. Example: 8×7 → 7 → 14 → 28 → 56. Fast and mistake-resistant once the doubles are automatic." },
+      { kind: "formula", text: "Or 8×n = 10×n − 2×n. 8×6 = 60 − 12 = 48. Useful when doubling three times is annoying (e.g. 8×13 → 26 → 52 → 104 vs 130 − 26 = 104)." },
+      { kind: "rule", text: "A number is divisible by 8 when its last three digits are. For 2,104 → look at 104 (= 8×13) → yes." },
     ],
     9: [
-      { kind: "formula", text: "9×n = 10×n − n. (9×7 = 70 − 7 = 63)" },
-      { kind: "trick", text: "Digits of the answer add to 9 (for 1 ≤ n ≤ 10). 9×4 = 36 → 3+6 = 9." },
-      { kind: "rule", text: "Divisible by 9 if the digit sum is a multiple of 9. 729 → 18 ✓" },
-      { kind: "trick", text: "Finger trick: hold up 10 fingers, fold the n-th; digits on each side give the answer." },
+      { kind: "formula", text: "9×n = 10×n − n. 9×7 = 70 − 7 = 63. The whole table is just \"round up to ten, then step back.\"" },
+      { kind: "trick", text: "For 1 ≤ n ≤ 10, the two digits of the answer ALWAYS sum to 9. 9×4 = 36 → 3+6 = 9. 9×8 = 72 → 7+2 = 9. Great for sanity checks." },
+      { kind: "trick", text: "Finger trick: spread all ten fingers, fold down the n-th (counting from the left). Fingers on the LEFT = tens digit, fingers on the RIGHT = ones digit. For 9×4, fold the 4th finger → 3 left + 6 right → 36." },
+      { kind: "rule", text: "Divisibility: a number is divisible by 9 iff its digit sum is. 729 → 7+2+9 = 18 → divisible." },
     ],
     10: [
-      { kind: "trick", text: "Just append a 0 to n." },
-      { kind: "rule", text: "Divisible by 10 if it ends in 0." },
+      { kind: "trick", text: "Append a zero to n. 10×14 = 140. This is the whole rule, and it's exact because our number system is base-10." },
+      { kind: "rule", text: "Divisible by 10 iff it ends in 0." },
     ],
     11: [
-      { kind: "trick", text: "For 1-digit n: write n twice. 11×4 = 44, 11×7 = 77." },
-      { kind: "trick", text: "For 2-digit n: split, add, insert. 11×23 → 2_3 with 2+3 = 5 → 253. Carry if the sum ≥ 10." },
-      { kind: "rule", text: "Alternating digit sum is a multiple of 11 (incl. 0). 2728 → 2−7+2−8 = −11 ✓" },
+      { kind: "trick", text: "For single-digit n: just write n twice. 11×4 = 44, 11×7 = 77. (It breaks cleanly once n ≥ 10.)" },
+      { kind: "trick", text: "For 2-digit n: split, add the digits, insert the sum between them. 11×23 → 2 _ 3 with 2+3 = 5 → 253. If the middle sum ≥ 10, carry into the left digit: 11×57 → 5 _ 7 with 5+7 = 12 → 627." },
+      { kind: "rule", text: "Alternating digit sum is a multiple of 11 (including 0). 2728 → 2−7+2−8 = −11 → divisible." },
     ],
     12: [
-      { kind: "formula", text: "12×n = 10×n + 2×n. (12×7 = 70 + 14 = 84)" },
-      { kind: "trick", text: "12 = 4 × 3, so 12×n = 4×n × 3 (or 6×n × 2)." },
-      { kind: "anchor", text: "12×12 = 144." },
+      { kind: "formula", text: "12×n = 10×n + 2×n. 12×7 = 70 + 14 = 84. Every 12-fact is a cheap addition of two easy ones." },
+      { kind: "trick", text: "12 factors as 4×3, so 12×n = (4×n) × 3, or (6×n) × 2 — pick whichever line of your table you know better." },
+      { kind: "anchor", text: "Memorise 12×12 = 144. Also handy: 12×25 = 300 (quarter-century trick — 25×4 = 100, so 25×12 = 300)." },
     ],
     13: [
-      { kind: "formula", text: "13×n = 10×n + 3×n. (13×6 = 60 + 18 = 78)" },
-      { kind: "anchor", text: "13×13 = 169." },
+      { kind: "formula", text: "13×n = 10×n + 3×n. Example: 13×6 = 60 + 18 = 78. Break the teen into 10 and the ones digit — works for any teen." },
+      { kind: "anchor", text: "Memorise 13×13 = 169 and 13×7 = 91. From 91 you can reach 13×8 (= 91+13 = 104) and 13×6 (= 91−13 = 78) in one step." },
+    ],
+    16: [
+      { kind: "trick", text: "16 is 2⁴. So 16×n = n doubled four times. Example: 16×5 → 5 → 10 → 20 → 40 → 80." },
+      { kind: "formula", text: "Or 16×n = (10×n) + (6×n). 16×7 = 70 + 42 = 112. Pair with the ×6 table once that's solid." },
+    ],
+    17: [
+      { kind: "formula", text: "17×n = 10×n + 7×n. Example: 17×6 = 60 + 42 = 102. If your 7s are reliable, 17s come free." },
+      { kind: "anchor", text: "Worth memorising: 17×3 = 51, 17×6 = 102, 17×17 = 289. Anything else is within ±17 of an anchor." },
+      { kind: "trick", text: "17 is a prime with no clean shortcut. Accept that repetition is the strategy here — every day you drill them they stick a little harder." },
     ],
     14: [
       { kind: "formula", text: "14×n = 10×n + 4×n." },
