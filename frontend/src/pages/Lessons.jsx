@@ -1072,12 +1072,12 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, index, totalLessons,
   // Next-up and locked nodes stay flat so the user's eye doesn't get pulled
   // everywhere.
   const shadowClass = done ? "brut-shadow-sm" : "";
-  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border ${shadowClass} grid place-items-center font-black text-2xl transition-all ${
+  const buttonClass = `relative w-16 h-16 sm:w-20 sm:h-20 brut-border ${shadowClass} grid place-items-center font-black text-2xl transition-transform duration-150 ${
     done
-      ? `${unit.accent} text-zinc-950 hover:-translate-y-0.5`
+      ? `${unit.accent} text-zinc-950 hover:scale-[1.04]`
       : unlocked
-      ? "bg-amber-300 text-zinc-950 hover:-translate-y-0.5"
-      : "surface-2 text-muted hover:-translate-y-0.5"
+      ? "bg-amber-300 text-zinc-950 hover:scale-[1.04]"
+      : "surface-2 text-muted hover:scale-[1.04]"
   } ${lesson.boss ? "rounded-md" : "rounded-full"}`;
 
   const innerIcon = done ? (
@@ -1094,9 +1094,9 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, index, totalLessons,
   // is visible without spilling onto the text label below.
   const pulse = isNext && (
     <motion.span
-      className={`absolute -inset-1 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-[3px] ring-amber-400`}
-      animate={{ scale: [1, 1.08, 1], opacity: [0.8, 0.25, 0.8] }}
-      transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      className={`absolute -inset-0.5 ${lesson.boss ? "rounded-md" : "rounded-full"} ring-2 ring-amber-400`}
+      animate={{ scale: [1, 1.05, 1], opacity: [0.7, 0.22, 0.7] }}
+      transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
       style={{ pointerEvents: "none" }}
     />
   );

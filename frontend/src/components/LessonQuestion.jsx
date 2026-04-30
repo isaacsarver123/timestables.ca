@@ -396,7 +396,7 @@ export default function LessonQuestion({ question, onAnswer }) {
 
       <div className="flex-1 min-h-0 grid place-items-center mb-2">
         <div
-          className="brut-border bg-zinc-900 dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-[4/3] max-h-[38vh] overflow-hidden"
+          className="brut-border surface rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-[4/3] max-h-[38vh] overflow-hidden"
           data-testid="lesson-question-visual"
         >
           <div className="w-full h-full">{visual}</div>
