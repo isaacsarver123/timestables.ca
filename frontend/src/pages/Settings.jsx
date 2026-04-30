@@ -17,6 +17,8 @@ import {
   ExternalLink,
   ShieldCheck,
   Infinity as InfinityIcon,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import {
   getState,
@@ -56,9 +58,13 @@ const Settings = () => {
     }
   };
 
-  const startCheckout = async () => {
+  const startCheckout = async (plan = "individual", familySlots = 6) => {
     try {
-      const { data } = await api.post("/stripe/checkout", { origin: window.location.origin });
+      const { data } = await api.post("/stripe/checkout", {
+        origin: window.location.origin,
+        plan,
+        family_slots: familySlots,
+      });
       window.location.href = data.url;
     } catch (ex) {
       toast.error(formatErr(ex.response?.data?.detail) || "Could not start checkout");
@@ -144,6 +150,9 @@ const Settings = () => {
             onSubscribe={startCheckout}
             onPortal={openPortal}
           />
+          {user?.billing?.plan_kind === "family" && ["active", "trialing", "past_due"].includes(user?.subscription_status) && (
+            <FamilyManager />
+          )}
         </section>
       )}
 
@@ -256,13 +265,21 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
   const sub = user.billing || {};
   const status = user.subscription_status;
   const active = ["active", "trialing", "past_due"].includes(status);
+  const [familySlots, setFamilySlots] = useState(Math.max(6, Number(sub.family_slots) || 6));
+  const [family, setFamily] = useState(null);
+
+  useEffect(() => {
+    if (!user) return;
+    api.get("/family/me").then(({ data }) => setFamily(data?.family || null)).catch(() => setFamily(null));
+  }, [user, sub.plan_kind, sub.family_slots]);
+
   const niceDate = (iso) => {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
     catch { return iso; }
   };
+  const familyPrice = 15 + Math.max(0, familySlots - 6) * 5;
 
-  // Admin: infinite free use, no billing actions
   if (user.is_admin) {
     return (
       <div className="space-y-3" data-testid="billing-admin">
@@ -283,21 +300,27 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
 
   if (active && (sub.last4 || sub.current_period_end)) {
     return (
-      <div className="space-y-3" data-testid="billing-active">
+      <div className="space-y-4" data-testid="billing-active">
         <div className="flex items-center gap-2">
           <CheckCircle2 size={16} className="text-emerald-500" />
           <span className="font-bold text-fg text-sm">
-            Subscribed · ${sub.amount_cad?.toFixed(2)} CAD / {sub.interval}
+            {sub.plan_kind === "family" ? "Family" : "Subscribed"} · ${Number(sub.amount_cad || 5).toFixed(2)} CAD / {sub.interval}
           </span>
         </div>
+        <Tile label="Plan" value={sub.plan_kind === "family" ? "Family" : "Individual"} testid="billing-plan-kind" />
+        {sub.plan_kind === "family" && (
+          <Tile label="Seats" value={`${sub.family_slots || family?.max_slots || 6} total`} sub="Owner included" testid="billing-family-slots" />
+        )}
         <Tile label="Next billing" value={niceDate(sub.current_period_end)} testid="billing-next" />
         <CardOnFile brand={sub.brand} last4={sub.last4} testid="billing-card" />
+        {sub.plan_kind === "family" && family && (
+          <div className="brut-border-soft surface-2 p-3 space-y-2" data-testid="family-members-summary">
+            <div className="flex items-center gap-2 font-bold text-fg text-sm"><Users size={14} /> Family members</div>
+            <div className="text-xs text-muted">{family.members?.length || 1} joined, {family.pending_invites?.filter((x) => x.status === "pending").length || 0} pending, {family.max_slots || 6} total slots.</div>
+          </div>
+        )}
         <p className="text-[11px] text-muted leading-relaxed" data-testid="billing-charge-line">
-          ${sub.amount_cad?.toFixed(2)} CAD will be charged to your{" "}
-          <span className="font-bold text-fg">
-            {sub.brand ? sub.brand : "card"}
-          </span>{" "}
-          ending in <span className="font-mono font-bold text-fg">{sub.last4 || "—"}</span> each {sub.interval}.
+          ${Number(sub.amount_cad || 5).toFixed(2)} CAD will be charged to your <span className="font-bold text-fg">{sub.brand ? sub.brand : "card"}</span> ending in <span className="font-mono font-bold text-fg">{sub.last4 || "—"}</span> each {sub.interval}.
         </p>
         {sub.cancel_at_period_end && (
           <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 brut-border-soft p-2.5">
@@ -315,44 +338,181 @@ const BillingPanel = ({ user, onSubscribe, onPortal }) => {
     );
   }
 
-  if (user.in_trial) {
-    const days = Math.floor((user.trial_seconds_left || 0) / 86400);
-    const hours = Math.floor(((user.trial_seconds_left || 0) % 86400) / 3600);
-    return (
-      <div className="space-y-3" data-testid="billing-trial">
-        <div className="flex items-center gap-2">
-          <Clock3 size={16} className="text-amber-500" />
-          <span className="font-bold text-fg text-sm">
-            Free trial — {days > 0 ? `${days}d ` : ""}{hours}h remaining
-          </span>
-        </div>
-        <p className="text-xs text-muted">
-          $5 CAD/month after trial. Your account ({user.email}) is locked to one trial.
-        </p>
-        <button
-          onClick={onSubscribe}
-          data-testid="billing-subscribe"
-          className="w-full brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center justify-center gap-2"
-        >
-          <CreditCard size={13} /> Subscribe — $5 CAD/mo
-        </button>
-      </div>
-    );
-  }
+  const TrialCopy = user.in_trial ? (
+    <p className="text-xs text-muted">$5 CAD/month individual, or family from $15/month. Your account ({user.email}) is locked to one trial.</p>
+  ) : null;
 
   return (
-    <div className="space-y-3" data-testid="billing-expired">
+    <div className="space-y-4" data-testid={user.in_trial ? "billing-trial" : "billing-expired"}>
       <div className="flex items-center gap-2">
-        <AlertTriangle size={16} className="text-rose-500" />
-        <span className="font-bold text-fg text-sm">Trial ended — subscribe to continue</span>
+        {user.in_trial ? <Clock3 size={16} className="text-amber-500" /> : <AlertTriangle size={16} className="text-rose-500" />}
+        <span className="font-bold text-fg text-sm">
+          {user.in_trial
+            ? `Free trial — ${Math.floor((user.trial_seconds_left || 0) / 86400) > 0 ? `${Math.floor((user.trial_seconds_left || 0) / 86400)}d ` : ""}${Math.floor(((user.trial_seconds_left || 0) % 86400) / 3600)}h remaining`
+            : "Trial ended — subscribe to continue"}
+        </span>
       </div>
-      <button
-        onClick={onSubscribe}
-        data-testid="billing-subscribe"
-        className="w-full brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center justify-center gap-2"
-      >
-        <CreditCard size={13} /> Subscribe — $5 CAD/mo
-      </button>
+      {TrialCopy}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="brut-border-soft surface-2 p-4 space-y-3">
+          <div className="font-bold text-fg">Individual</div>
+          <div className="text-xs text-muted">One learner, full access.</div>
+          <button
+            onClick={() => onSubscribe("individual")}
+            data-testid="billing-subscribe-individual"
+            className="w-full brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white flex items-center justify-center gap-2"
+          >
+            <CreditCard size={13} /> Subscribe — $5 CAD/mo
+          </button>
+        </div>
+        <div className="brut-border-soft surface-2 p-4 space-y-3">
+          <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> Family</div>
+          <div className="text-xs text-muted">$15/month includes 6 total seats, then +$5 per extra seat up to 10.</div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted font-medium mb-1">Seats</div>
+            <div className="flex items-center gap-2">
+              <input type="range" min="6" max="10" step="1" value={familySlots} onChange={(e) => setFamilySlots(Number(e.target.value))} className="flex-1" />
+              <div className="w-16 text-right font-bold text-fg">{familySlots}</div>
+            </div>
+          </div>
+          <button
+            onClick={() => onSubscribe("family", familySlots)}
+            data-testid="billing-subscribe-family"
+            className="w-full brut-border bg-blue-600 text-white px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-700 flex items-center justify-center gap-2"
+          >
+            <UserPlus size={13} /> Start family — ${familyPrice} CAD/mo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FamilyManager = () => {
+  const [family, setFamily] = useState(null);
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [busyId, setBusyId] = useState("");
+
+  const load = async () => {
+    const { data } = await api.get("/family/me");
+    setFamily(data?.family || null);
+  };
+
+  useEffect(() => { load().catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (!pickerOpen || search.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    let live = true;
+    api.get(`/profile/search?q=${encodeURIComponent(search.trim())}`).then(({ data }) => {
+      if (live) setResults(data?.results || []);
+    }).catch(() => {
+      if (live) setResults([]);
+    });
+    return () => { live = false; };
+  }, [search, pickerOpen]);
+
+  const invite = async (userId) => {
+    setBusyId(userId);
+    try {
+      await api.post("/family/invite", { invitee_user_id: userId });
+      toast.success("Family invite sent");
+      setPickerOpen(false);
+      setSearch("");
+      setResults([]);
+      await load();
+    } catch (e) {
+      toast.error(formatErr(e.response?.data?.detail) || "Could not send invite");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  if (!family) return null;
+
+  const joined = family.members || [];
+  const pending = (family.pending_invites || []).filter((x) => x.status === "pending");
+  const used = joined.length + pending.length;
+  const slots = Array.from({ length: family.max_slots || 6 }, (_, i) => joined[i] || pending[i - joined.length] || null);
+
+  return (
+    <div className="pt-2 space-y-3" data-testid="family-manager">
+      <div>
+        <div className="font-bold text-fg flex items-center gap-2"><Users size={14} /> Family members</div>
+        <div className="text-xs text-muted mt-1">Fill empty slots by clicking the plus and searching by name or username.</div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        {slots.map((entry, idx) => {
+          const isPending = entry && entry.invitee;
+          const person = isPending ? entry.invitee : entry;
+          const isEmpty = !entry;
+          return (
+            <button
+              key={`${idx}:${person?.id || "empty"}`}
+              onClick={() => isEmpty && setPickerOpen(true)}
+              disabled={!isEmpty}
+              className={`brut-border p-3 min-h-[110px] text-left ${isEmpty ? "surface-2 hover:bg-blue-50 dark:hover:bg-blue-950/30" : "surface"}`}
+            >
+              {isEmpty ? (
+                <div className="h-full grid place-items-center text-center text-muted">
+                  <div>
+                    <div className="w-10 h-10 mx-auto brut-border grid place-items-center mb-2">+</div>
+                    <div className="text-xs font-bold uppercase tracking-wider">Add member</div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="font-bold text-fg truncate">{person?.name || "Pending"}</div>
+                  <div className="text-xs text-muted truncate">{person?.username ? `@${person.username}` : isPending ? "Invite pending" : "Member"}</div>
+                  {isPending && <div className="mt-2 text-[10px] uppercase tracking-[0.25em] text-amber-600">Pending</div>}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-xs text-muted">{used} of {family.max_slots || 6} slots in use.</div>
+
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm p-4 grid place-items-center">
+          <div className="w-full max-w-xl surface brut-border p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-fg">Invite a family member</div>
+                <div className="text-xs text-muted">Search by name or username.</div>
+              </div>
+              <button onClick={() => setPickerOpen(false)} className="brut-border surface-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider">Close</button>
+            </div>
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users..."
+              className="w-full brut-border bg-transparent px-3 py-2.5 text-sm text-fg focus:outline-none"
+            />
+            <div className="space-y-2 max-h-[45vh] overflow-auto">
+              {results.map((r) => (
+                <div key={r.id} className="brut-border-soft surface-2 p-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-fg truncate">{r.name}</div>
+                    <div className="text-xs text-muted truncate">{r.username ? `@${r.username}` : "No username yet"}</div>
+                  </div>
+                  <button disabled={busyId === r.id} onClick={() => invite(r.id)} className="brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-3 py-2 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white disabled:opacity-50">
+                    Invite
+                  </button>
+                </div>
+              ))}
+              {search.trim().length >= 2 && results.length === 0 && (
+                <div className="text-sm text-muted text-center py-6">No users found.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

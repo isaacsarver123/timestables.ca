@@ -19,6 +19,8 @@ import {
   GraduationCap,
   Gem,
   Zap,
+  Bell,
+  Sparkles,
 } from "lucide-react";
 import {
   getState,
@@ -32,6 +34,8 @@ import { useAuth } from "@/lib/auth";
 import { requestGuardedNav } from "@/lib/leaveGuard";
 import TrialBanner from "@/components/TrialBanner";
 import { loadCms, subscribeCms, getCmsCached } from "@/lib/cms";
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 // Compact a count for the header pills:
 //   0–9999      → exact ("1023")
@@ -90,6 +94,9 @@ export const Layout = ({ children }) => {
   const [footerText, setFooterText] = useState(
     () => (getCmsCached()?.footer_text || "timestables.ca · v5")
   );
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [pendingInvite, setPendingInvite] = useState(null);
+  const [showTour, setShowTour] = useState(false);
   useEffect(() => {
     loadCms().then((d) => {
       if (d?.footer_text) setFooterText(d.footer_text);
@@ -105,6 +112,52 @@ export const Layout = ({ children }) => {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (!user) {
+      setUnreadNotifications(0);
+      setPendingInvite(null);
+      return;
+    }
+    let live = true;
+    api.get("/notifications?limit=12").then(({ data }) => {
+      if (!live) return;
+      setUnreadNotifications(data?.unread_count || 0);
+      const invite = (data?.items || []).find((item) => item.unread && item.kind === "family_invite");
+      setPendingInvite(invite || null);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user?.id || !user?.created_at) return;
+    const seenKey = `tt-tour-seen:${user.id}`;
+    if (localStorage.getItem(seenKey) === "1") return;
+    const ageMs = Date.now() - new Date(user.created_at).getTime();
+    if (ageMs >= 0 && ageMs < 15 * 60 * 1000) setShowTour(true);
+  }, [user?.id, user?.created_at]);
+
+  const markTourSeen = () => {
+    if (user?.id) localStorage.setItem(`tt-tour-seen:${user.id}`, "1");
+    setShowTour(false);
+  };
+
+  const dismissInvitePrompt = async () => {
+    setPendingInvite(null);
+  };
+
+  const acceptInvitePrompt = async () => {
+    const inviteId = pendingInvite?.data?.invite_id;
+    if (!inviteId) return;
+    try {
+      await api.post(`/family/invites/${inviteId}/accept`);
+      toast.success("Family invite accepted");
+      setUnreadNotifications((n) => Math.max(0, n - 1));
+      setPendingInvite(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not accept invite");
+    }
+  };
+
   const { level, pct } = progressToNextLevel(state.xp);
   const isAuthed = !!user; // user object means signed in
   const isAdmin = !!user?.is_admin;
@@ -116,6 +169,7 @@ export const Layout = ({ children }) => {
     { to: "/play/daily", label: "Daily", icon: CalendarCheck, testid: "nav-daily" },
     { to: "/stats", label: "Stats", icon: BarChart3, testid: "nav-stats" },
     { to: "/shop", label: "Shop", icon: Store, testid: "nav-shop" },
+    { to: "/notifications", label: "Notifications", icon: Bell, testid: "nav-notifications" },
     { to: "/profile", label: "Profile", icon: UserIcon, testid: "nav-profile" },
   ];
   if (isAdmin) {
@@ -238,18 +292,20 @@ export const Layout = ({ children }) => {
                 </Link>
                 <XpBoostPill boostUntil={user?.xp_boost_until} active={user?.xp_boost_active} />
                 <Link
-                  to="/settings"
-                  data-testid="hud-user"
-                  title={`${user.name} · ${user.email}`}
-                  aria-label="Profile / settings"
-                  className={`flex items-center gap-1 px-1.5 py-1 brut-border ${
-                    isAdmin ? "bg-amber-300 text-zinc-950" : "surface"
+                  to="/notifications"
+                  data-testid="hud-notifications"
+                  title={unreadNotifications > 0 ? `${unreadNotifications} unread notifications` : "Notifications"}
+                  aria-label="Notifications"
+                  className={`relative flex items-center gap-1 px-1.5 py-1 brut-border ${
+                    unreadNotifications > 0 ? "bg-blue-600 text-white" : (isAdmin ? "bg-amber-300 text-zinc-950" : "surface")
                   } hover:bg-blue-600 hover:text-white`}
                 >
-                  {isAdmin ? <ShieldCheck size={12} /> : <UserIcon size={12} />}
-                  <span className="hidden xl:inline font-mono text-[11px] font-semibold max-w-[80px] truncate">
-                    {user.name}
-                  </span>
+                  <Bell size={12} />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] leading-[18px] text-center font-bold brut-border border-white dark:border-zinc-950">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/settings"
@@ -307,6 +363,15 @@ export const Layout = ({ children }) => {
         {children}
       </main>
 
+      {showTour && <WelcomeTourModal onClose={markTourSeen} />}
+      {pendingInvite && (
+        <FamilyInviteModal
+          invite={pendingInvite}
+          onAccept={acceptInvitePrompt}
+          onLater={dismissInvitePrompt}
+        />
+      )}
+
       <footer className="brut-border-soft border-x-0 border-b-0 surface">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 py-3 flex justify-between items-center text-[11px] text-muted font-mono">
           <span data-testid="footer-text">{footerText}</span>
@@ -316,5 +381,62 @@ export const Layout = ({ children }) => {
     </div>
   );
 };
+
+const WelcomeTourModal = ({ onClose }) => (
+  <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm p-4 grid place-items-center">
+    <div className="w-full max-w-lg surface brut-border p-6 space-y-4">
+      <div className="flex items-center gap-2 text-blue-600">
+        <Sparkles size={18} />
+        <span className="text-xs font-bold uppercase tracking-[0.25em]">Welcome tour</span>
+      </div>
+      <div>
+        <h3 className="text-2xl font-black tracking-tight text-fg">You’re in. Here’s the quick tour.</h3>
+        <p className="text-sm text-muted mt-2">This only shows once for new accounts.</p>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3 text-sm">
+        <TourCard title="Play" body="Quick games, daily challenges, boss fights, and your regular practice flow." />
+        <TourCard title="Lessons" body="Guided lesson path with visual questions, checkpoints, and tests." />
+        <TourCard title="Shop + stats" body="Use coins and gems, track streaks, and see how fast you’re improving." />
+        <TourCard title="Profile + notifications" body="Set your username, add friends, and watch for family-plan invites." />
+      </div>
+      <button
+        onClick={onClose}
+        className="w-full brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-4 py-3 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white"
+      >
+        Got it
+      </button>
+    </div>
+  </div>
+);
+
+const TourCard = ({ title, body }) => (
+  <div className="brut-border-soft surface-2 p-3">
+    <div className="font-bold text-fg">{title}</div>
+    <div className="text-muted text-xs mt-1 leading-relaxed">{body}</div>
+  </div>
+);
+
+const FamilyInviteModal = ({ invite, onAccept, onLater }) => (
+  <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm p-4 grid place-items-center">
+    <div className="w-full max-w-md surface brut-border p-6 space-y-4">
+      <div className="flex items-center gap-2 text-blue-600">
+        <Bell size={18} />
+        <span className="text-xs font-bold uppercase tracking-[0.25em]">Family invite</span>
+      </div>
+      <div>
+        <h3 className="text-xl font-black tracking-tight text-fg">You’ve been invited</h3>
+        <p className="text-sm text-muted mt-2">{invite?.body || "You have a pending family invite."}</p>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onLater} className="flex-1 brut-border surface-2 text-fg px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-zinc-200 dark:hover:bg-zinc-700">
+          Later
+        </button>
+        <button onClick={onAccept} className="flex-1 brut-border bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 px-3 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-blue-600 hover:text-white">
+          Accept invite
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 export default Layout;

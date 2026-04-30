@@ -23,6 +23,7 @@ import Lessons from "@/pages/Lessons";
 import Profile from "@/pages/Profile";
 import AvatarEditor from "@/pages/AvatarEditor";
 import PublicProfile from "@/pages/PublicProfile";
+import Notifications from "@/pages/Notifications";
 import { BillingSuccess, BillingCancel } from "@/pages/BillingResult";
 import { AuthProvider } from "@/lib/auth";
 import { initRemoteSync, getState, subscribe } from "@/lib/storage";
@@ -90,6 +91,7 @@ function App() {
             <Route path="/lessons" element={<Layout><PaywallGuard><Lessons /></PaywallGuard></Layout>} />
             <Route path="/profile" element={<Layout><PaywallGuard allowExpired><Profile /></PaywallGuard></Layout>} />
             <Route path="/profile/avatar" element={<Layout><PaywallGuard allowExpired><AvatarEditor /></PaywallGuard></Layout>} />
+            <Route path="/notifications" element={<Layout><PaywallGuard allowExpired><Notifications /></PaywallGuard></Layout>} />
             <Route path="/u/:username" element={<Layout><PaywallGuard><PublicProfile /></PaywallGuard></Layout>} />
             <Route path="/stats" element={<Layout><PaywallGuard><Stats /></PaywallGuard></Layout>} />
             <Route path="/shop" element={<Layout><PaywallGuard><Shop /></PaywallGuard></Layout>} />

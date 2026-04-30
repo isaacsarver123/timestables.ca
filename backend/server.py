@@ -13,6 +13,7 @@ import os
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from uuid import uuid4
 
 import bcrypt
 import jwt
@@ -35,6 +36,10 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 PRICE_CAD = float(os.environ.get("SUBSCRIPTION_PRICE_CAD", "5.00"))
+FAMILY_PRICE_CAD = float(os.environ.get("FAMILY_SUBSCRIPTION_PRICE_CAD", "15.00"))
+FAMILY_INCLUDED_SLOTS = int(os.environ.get("FAMILY_INCLUDED_SLOTS", "6"))
+FAMILY_MAX_SLOTS = int(os.environ.get("FAMILY_MAX_SLOTS", "10"))
+FAMILY_EXTRA_SLOT_PRICE_CAD = float(os.environ.get("FAMILY_EXTRA_SLOT_PRICE_CAD", "5.00"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "2"))
 ALLOW_MULTI_SIGNUP_PER_IP = os.environ.get("ALLOW_MULTI_SIGNUP_PER_IP", "0") == "1"
 
@@ -147,8 +152,10 @@ def serialize_user(doc: dict) -> dict:
             "cancel_at_period_end": sub.get("cancel_at_period_end", False),
             "last4": sub.get("last4"),
             "brand": sub.get("brand"),
-            "amount_cad": PRICE_CAD,
-            "interval": "month",
+            "amount_cad": float(sub.get("amount_cad") or PRICE_CAD),
+            "interval": sub.get("interval") or "month",
+            "plan_kind": sub.get("plan_kind") or "individual",
+            "family_slots": int(sub.get("family_slots") or 0),
         },
     }
 
@@ -208,6 +215,46 @@ async def ensure_stripe() -> str:
     return key
 
 
+def _family_price_for_slots(slots: int) -> float:
+    slots = int(slots or FAMILY_INCLUDED_SLOTS)
+    if slots < FAMILY_INCLUDED_SLOTS or slots > FAMILY_MAX_SLOTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Family slots must be between {FAMILY_INCLUDED_SLOTS} and {FAMILY_MAX_SLOTS}."
+        )
+    return FAMILY_PRICE_CAD + max(0, slots - FAMILY_INCLUDED_SLOTS) * FAMILY_EXTRA_SLOT_PRICE_CAD
+
+
+async def _create_notification(user_id: str, kind: str, title: str, body: str, data: Optional[dict] = None):
+    doc = {
+        "user_id": user_id,
+        "kind": kind,
+        "title": title,
+        "body": body,
+        "data": data or {},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "read_at": None,
+    }
+    res = await db.notifications.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    return doc
+
+
+async def _serialize_notification(doc: dict) -> dict:
+    if not doc:
+        return None
+    return {
+        "id": str(doc.get("_id")),
+        "kind": doc.get("kind") or "generic",
+        "title": doc.get("title") or "",
+        "body": doc.get("body") or "",
+        "data": doc.get("data") or {},
+        "created_at": doc.get("created_at"),
+        "read_at": doc.get("read_at"),
+        "unread": not bool(doc.get("read_at")),
+    }
+
+
 # ------------------------------------------------------------------ MODELS
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -260,6 +307,16 @@ class ProfileUpdateIn(BaseModel):
     avatar: Optional[dict] = None   # arbitrary config blob
 
 
+class SubscriptionCheckoutIn(BaseModel):
+    origin: Optional[str] = None
+    plan: Optional[str] = "individual"
+    family_slots: Optional[int] = FAMILY_INCLUDED_SLOTS
+
+
+class FamilyInviteIn(BaseModel):
+    invitee_user_id: str
+
+
 class FriendCodeIn(BaseModel):
     code: str
 
@@ -293,6 +350,10 @@ async def on_startup():
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.user_state.create_index("user_id", unique=True)
     await db.login_attempts.create_index("identifier")
+    await db.notifications.create_index([("user_id", 1), ("read_at", 1), ("created_at", -1)])
+    await db.families.create_index("owner_user_id", unique=True)
+    await db.families.create_index("member_user_ids")
+    await db.families.create_index("pending_invites.invitee_user_id")
     # Seed admin
     # Migration: drop legacy admin if present so we don't end up with two admins.
     legacy_admins = ["isaac@timestables.ca"]
@@ -537,6 +598,9 @@ async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
     priority = {"active": 0, "trialing": 1, "past_due": 2, "unpaid": 3,
                 "canceled": 4, "incomplete": 5, "incomplete_expired": 6}
     chosen = sorted(subs.data, key=lambda s: priority.get(s.status, 9))[0]
+    metadata = chosen.metadata or {}
+    plan_kind = metadata.get("plan_kind") or "individual"
+    family_slots = int(metadata.get("family_slots") or 0)
     upd = {
         "subscription.status": chosen.status,
         "subscription.customer_id": customer_id,
@@ -546,7 +610,25 @@ async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
             if chosen.current_period_end else None
         ),
         "subscription.cancel_at_period_end": bool(chosen.cancel_at_period_end),
+        "subscription.plan_kind": plan_kind,
+        "subscription.family_slots": family_slots,
     }
+    try:
+        amount_total = 0
+        interval = "month"
+        if getattr(chosen, "items", None) and getattr(chosen.items, "data", None):
+            for item in chosen.items.data:
+                price = getattr(item, "price", None)
+                if price and getattr(price, "unit_amount", None):
+                    amount_total += (price.unit_amount or 0) * (getattr(item, "quantity", 1) or 1)
+                recurring = getattr(price, "recurring", None)
+                if recurring and getattr(recurring, "interval", None):
+                    interval = recurring.interval
+        if amount_total:
+            upd["subscription.amount_cad"] = round(amount_total / 100, 2)
+        upd["subscription.interval"] = interval
+    except Exception:
+        pass
     try:
         cust = stripe.Customer.retrieve(
             customer_id, expand=["invoice_settings.default_payment_method"]
@@ -558,14 +640,47 @@ async def _sync_subscription_from_stripe(user_id: str, customer_id: str):
     except Exception as e:
         log.warning("payment-method fetch failed: %s", e)
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": upd})
+    if plan_kind == "family":
+        now = datetime.now(timezone.utc).isoformat()
+        await db.families.update_one(
+            {"owner_user_id": user_id},
+            {
+                "$set": {
+                    "max_slots": max(FAMILY_INCLUDED_SLOTS, family_slots or FAMILY_INCLUDED_SLOTS),
+                    "subscription_status": chosen.status,
+                    "updated_at": now,
+                },
+                "$setOnInsert": {
+                    "owner_user_id": user_id,
+                    "member_user_ids": [user_id],
+                    "pending_invites": [],
+                    "created_at": now,
+                },
+            },
+            upsert=True,
+        )
 
 
 @api.post("/stripe/checkout")
-async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)):
+async def stripe_checkout(payload: SubscriptionCheckoutIn, user: dict = Depends(get_token_user)):
     await ensure_stripe()
-    body = await request.json()
-    origin = (body.get("origin") or FRONTEND_URL).rstrip("/")
+    origin = (payload.origin or FRONTEND_URL).rstrip("/")
     customer_id = await _ensure_stripe_customer(user)
+    plan = (payload.plan or "individual").strip().lower()
+    family_slots = int(payload.family_slots or FAMILY_INCLUDED_SLOTS)
+    if plan == "family":
+        amount = _family_price_for_slots(family_slots)
+        product_name = "timestables.ca Family"
+    else:
+        plan = "individual"
+        family_slots = 0
+        amount = PRICE_CAD
+        product_name = "timestables.ca Premium"
+    metadata = {
+        "user_id": str(user["_id"]),
+        "plan_kind": plan,
+        "family_slots": str(family_slots),
+    }
     try:
         session = stripe.checkout.Session.create(
             customer=customer_id,
@@ -573,16 +688,16 @@ async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)
             line_items=[{
                 "price_data": {
                     "currency": "cad",
-                    "unit_amount": int(round(PRICE_CAD * 100)),
+                    "unit_amount": int(round(amount * 100)),
                     "recurring": {"interval": "month"},
-                    "product_data": {"name": "timestables.ca Premium"},
+                    "product_data": {"name": product_name},
                 },
                 "quantity": 1,
             }],
             success_url=f"{origin}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{origin}/billing/cancel",
-            metadata={"user_id": str(user["_id"])},
-            subscription_data={"metadata": {"user_id": str(user["_id"])}},
+            metadata=metadata,
+            subscription_data={"metadata": metadata},
             allow_promotion_codes=True,
         )
     except stripe.error.StripeError as e:
@@ -593,10 +708,13 @@ async def stripe_checkout(request: Request, user: dict = Depends(get_token_user)
         "session_id": session.id,
         "user_id": str(user["_id"]),
         "email": user["email"],
-        "amount": PRICE_CAD,
+        "amount": amount,
         "currency": "cad",
         "status": "initiated",
         "payment_status": "unpaid",
+        "kind": "subscription",
+        "plan_kind": plan,
+        "family_slots": family_slots,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"url": session.url, "session_id": session.id}
@@ -892,6 +1010,181 @@ async def profile_search(q: str, user: dict = Depends(get_token_user), limit: in
             continue
         out.append(await _user_public(u))
     return {"results": out}
+
+
+@api.get("/notifications")
+async def notifications_list(user: dict = Depends(get_token_user), limit: int = 50):
+    cur = db.notifications.find(
+        {"user_id": str(user["_id"])}
+    ).sort("created_at", -1).limit(min(limit, 100))
+    items = [await _serialize_notification(doc) async for doc in cur]
+    unread = await db.notifications.count_documents({"user_id": str(user["_id"]), "read_at": None})
+    return {"items": items, "unread_count": unread}
+
+
+@api.post("/notifications/read-all")
+async def notifications_read_all(user: dict = Depends(get_token_user)):
+    now = datetime.now(timezone.utc).isoformat()
+    await db.notifications.update_many(
+        {"user_id": str(user["_id"]), "read_at": None},
+        {"$set": {"read_at": now}},
+    )
+    return {"ok": True}
+
+
+@api.post("/notifications/{notification_id}/read")
+async def notification_mark_read(notification_id: str, user: dict = Depends(get_token_user)):
+    try:
+        oid = ObjectId(notification_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid notification id")
+    res = await db.notifications.update_one(
+        {"_id": oid, "user_id": str(user["_id"]), "read_at": None},
+        {"$set": {"read_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"ok": True}
+
+
+@api.get("/family/me")
+async def family_me(user: dict = Depends(get_token_user)):
+    user_id = str(user["_id"])
+    family = await db.families.find_one({
+        "$or": [
+            {"owner_user_id": user_id},
+            {"member_user_ids": user_id},
+            {"pending_invites.invitee_user_id": user_id},
+        ]
+    })
+    if not family:
+        return {"family": None}
+    user_ids = list(dict.fromkeys([family.get("owner_user_id")] + (family.get("member_user_ids") or [])))
+    docs = await db.users.find({"_id": {"$in": [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]}}, {"password_hash": 0}).to_list(None)
+    public_map = {}
+    for d in docs:
+        public_map[str(d["_id"])] = await _user_public(d)
+    pending = []
+    for inv in family.get("pending_invites") or []:
+        invitee = public_map.get(inv.get("invitee_user_id"))
+        if not invitee and ObjectId.is_valid(inv.get("invitee_user_id") or ""):
+            raw = await db.users.find_one({"_id": ObjectId(inv.get("invitee_user_id"))}, {"password_hash": 0})
+            invitee = await _user_public(raw) if raw else None
+        pending.append({
+            "id": inv.get("id"),
+            "status": inv.get("status") or "pending",
+            "created_at": inv.get("created_at"),
+            "invitee": invitee,
+        })
+    return {
+        "family": {
+            "owner_user_id": family.get("owner_user_id"),
+            "is_owner": family.get("owner_user_id") == user_id,
+            "max_slots": int(family.get("max_slots") or FAMILY_INCLUDED_SLOTS),
+            "subscription_status": family.get("subscription_status"),
+            "members": [public_map[uid] for uid in user_ids if uid in public_map],
+            "pending_invites": pending,
+        }
+    }
+
+
+@api.post("/family/invite")
+async def family_invite(payload: FamilyInviteIn, user: dict = Depends(get_token_user)):
+    user_id = str(user["_id"])
+    family = await db.families.find_one({"owner_user_id": user_id})
+    if not family:
+        raise HTTPException(status_code=400, detail="Start a family subscription first.")
+    sub = user.get("subscription") or {}
+    if sub.get("plan_kind") != "family" or sub.get("status") not in ["active", "trialing", "past_due"]:
+        raise HTTPException(status_code=403, detail="Your family plan is not active.")
+    invitee_id = payload.invitee_user_id.strip()
+    if invitee_id == user_id:
+        raise HTTPException(status_code=400, detail="You are already in your family.")
+    if not ObjectId.is_valid(invitee_id):
+        raise HTTPException(status_code=400, detail="Invalid user.")
+    invitee = await db.users.find_one({"_id": ObjectId(invitee_id)})
+    if not invitee:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing_family = await db.families.find_one({
+        "$or": [
+            {"owner_user_id": invitee_id},
+            {"member_user_ids": invitee_id},
+            {"pending_invites": {"$elemMatch": {"invitee_user_id": invitee_id, "status": "pending"}}},
+        ]
+    })
+    if existing_family:
+        raise HTTPException(status_code=400, detail="This user is already in a family or already invited.")
+    members = family.get("member_user_ids") or [user_id]
+    pending = [i for i in (family.get("pending_invites") or []) if i.get("status") == "pending"]
+    if invitee_id in members:
+        raise HTTPException(status_code=400, detail="This user is already in your family.")
+    if any(i.get("invitee_user_id") == invitee_id for i in pending):
+        raise HTTPException(status_code=400, detail="That invite is already pending.")
+    max_slots = int(family.get("max_slots") or FAMILY_INCLUDED_SLOTS)
+    if len(members) + len(pending) >= max_slots:
+        raise HTTPException(status_code=400, detail="No family slots left.")
+    invite_id = uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    owner_name = user.get("name") or (user.get("email") or "").split("@")[0]
+    note = await _create_notification(
+        invitee_id,
+        "family_invite",
+        "Family invite",
+        f"{owner_name} invited you to join their TimeTables family plan.",
+        {"invite_id": invite_id, "owner_name": owner_name, "owner_user_id": user_id},
+    )
+    invite = {
+        "id": invite_id,
+        "invitee_user_id": invitee_id,
+        "status": "pending",
+        "created_at": now,
+        "notification_id": note.get("id"),
+    }
+    await db.families.update_one(
+        {"owner_user_id": user_id},
+        {"$push": {"pending_invites": invite}, "$set": {"updated_at": now}},
+    )
+    return {"ok": True, "invite_id": invite_id}
+
+
+@api.post("/family/invites/{invite_id}/accept")
+async def family_accept(invite_id: str, user: dict = Depends(get_token_user)):
+    user_id = str(user["_id"])
+    family = await db.families.find_one({
+        "pending_invites": {"$elemMatch": {"id": invite_id, "invitee_user_id": user_id, "status": "pending"}}
+    })
+    if not family:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    members = family.get("member_user_ids") or [family.get("owner_user_id")]
+    pending = [i for i in (family.get("pending_invites") or []) if i.get("status") == "pending"]
+    max_slots = int(family.get("max_slots") or FAMILY_INCLUDED_SLOTS)
+    if len(members) >= max_slots:
+        raise HTTPException(status_code=400, detail="This family is already full.")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.families.update_one(
+        {"owner_user_id": family.get("owner_user_id")},
+        {
+            "$addToSet": {"member_user_ids": user_id},
+            "$set": {"updated_at": now, "pending_invites.$[inv].status": "accepted"},
+        },
+        array_filters=[{"inv.id": invite_id}],
+    )
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"family.owner_user_id": family.get("owner_user_id"), "family.joined_at": now}},
+    )
+    await db.notifications.update_many(
+        {"user_id": user_id, "kind": "family_invite", "data.invite_id": invite_id},
+        {"$set": {"read_at": now, "accepted_at": now}},
+    )
+    await _create_notification(
+        family.get("owner_user_id"),
+        "family_update",
+        "Invite accepted",
+        f"{user.get('name') or (user.get('email') or '').split('@')[0]} joined your family plan.",
+        {"invite_id": invite_id, "member_user_id": user_id},
+    )
+    return {"ok": True}
 
 
 # Add username unique index on startup
