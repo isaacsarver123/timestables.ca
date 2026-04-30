@@ -964,6 +964,7 @@ function LessonPath({
   onStart,
   onJumpHere,
 }) {
+  const getNodeOffset = (i) => Math.sin((i / 3) * Math.PI) * 90;
   let nextLessonId = null;
   outer: for (const lv of path) {
     for (const l of lv.lessons) {
@@ -1012,7 +1013,7 @@ function LessonPath({
                 const lessonUnlocked = isLessonUnlocked(lesson.id);
                 const lessonDone = isLessonCompleted(lesson.id);
                 const isNext = lesson.id === nextLessonId;
-                const offset = Math.sin((i / 3) * Math.PI) * 90;
+                const offset = getNodeOffset(i);
                 return (
                   <div
                     key={lesson.id}
@@ -1025,6 +1026,10 @@ function LessonPath({
                       done={lessonDone}
                       unlocked={lessonUnlocked}
                       isNext={isNext}
+                      index={i}
+                      totalLessons={unit.lessons.length}
+                      offset={offset}
+                      getNodeOffset={getNodeOffset}
                       onStart={() => onStart(lesson, unit)}
                       onJump={() => onJumpHere(lesson)}
                     />
@@ -1051,7 +1056,7 @@ function LessonPath({
 //   click-outside-to-close, collision-detected sides, focus trap, and the
 //   portal escapes the parent's bounding box → no overlap with neighbours.
 // ─────────────────────────────────────────────────────────────────────────
-function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
+function LessonNode({ lesson, unit, done, unlocked, isNext, index, totalLessons, offset, getNodeOffset, onStart, onJump }) {
   const [open, setOpen] = useState(false);
 
   // Shadow lives only on COMPLETED lessons — it reads as a "credited" mark.
@@ -1087,6 +1092,11 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
     />
   );
 
+  const prevOffset = index > 0 ? getNodeOffset(index - 1) : 0;
+  const nextOffset = index < totalLessons - 1 ? getNodeOffset(index + 1) : 0;
+  const neighbourOffset = Math.abs(nextOffset) > Math.abs(prevOffset) ? nextOffset : prevOffset;
+  const sideHint = (neighbourOffset - offset) > 0 ? "left" : "right";
+
   // Direct-action button for done / next-up unlocked nodes — no popover.
   if (done || unlocked) {
     return (
@@ -1121,7 +1131,7 @@ function LessonNode({ lesson, unit, done, unlocked, isNext, onStart, onJump }) {
       </div>
       <PopoverContent
         align="center"
-        side="top"
+        side={sideHint}
         sideOffset={10}
         collisionPadding={16}
         className="w-60 surface brut-border brut-shadow rounded-md p-3 text-left"
