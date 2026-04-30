@@ -312,6 +312,9 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
   };
 
   const familyPrice = 15 + Math.max(0, familySlots - FAMILY_INCLUDED_SLOTS) * 5;
+  const familyPricingNote = familySlots < FAMILY_INCLUDED_SLOTS
+    ? `${familySlots} seats selected, still $${familyPrice} CAD/month minimum for TimesTables, MAX Family.`
+    : `${familySlots} total seats, $${familyPrice} CAD/month.`;
   const isUpgrade = active && isIndividual;
 
   const handleFamilyAction = async () => {
@@ -365,7 +368,7 @@ const BillingPanel = ({ user, onSubscribe, onChangePlan, onPortal }) => {
             <span>{FAMILY_MIN_SLOTS} seats min</span>
             <span>{FAMILY_MAX_SLOTS} seats max</span>
           </div>
-          <div className="text-[11px] text-muted">{familySlots} total seats, ${familyPrice} CAD/month.</div>
+          <div className="text-[11px] text-muted">{familyPricingNote}</div>
         </div>
       )}
     </div>
