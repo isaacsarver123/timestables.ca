@@ -63,6 +63,7 @@ const PUSH_RANGE_MULT = 1.8;
 
 // ── GroupedDots — `b` groups of `a` dots.
 function GroupedDots({ a, b, motionSettings }) {
+  const SHIFT_Y = -4;
   let rows = a, cols = b;
   if (rows > cols * 1.6) {
     [rows, cols] = [cols, rows];
@@ -89,7 +90,7 @@ function GroupedDots({ a, b, motionSettings }) {
       ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid meet"
-      className="w-full h-full"
+      className="w-full h-full block"
       onMouseMove={onMove}
       onMouseLeave={() => setPointer(null)}
     >
@@ -100,7 +101,7 @@ function GroupedDots({ a, b, motionSettings }) {
         const cy = pad + row * inGap + inGap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, inGap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         return (
-          <g key={i} transform={`translate(${dx}, ${dy})`}>
+          <g key={i} transform={`translate(${dx}, ${dy + SHIFT_Y})`}>
             <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
           </g>
         );
@@ -111,6 +112,7 @@ function GroupedDots({ a, b, motionSettings }) {
 
 // ── DotGrid — flat `rows × cols` grid
 function DotGrid({ a, b, motionSettings }) {
+  const SHIFT_Y = -4;
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
@@ -132,7 +134,7 @@ function DotGrid({ a, b, motionSettings }) {
       ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid meet"
-      className="w-full h-full"
+      className="w-full h-full block"
       onMouseMove={onMove}
       onMouseLeave={() => setPointer(null)}
     >
@@ -143,7 +145,7 @@ function DotGrid({ a, b, motionSettings }) {
         const cy = pad + r * gap + gap / 2;
         const { dx, dy } = repulsion(cx, cy, pointer, gap * (motionSettings?.mouseRadius ?? PUSH_RANGE_MULT), motionSettings?.mouseForce ?? PUSH_FORCE);
         return (
-          <g key={i} transform={`translate(${dx}, ${dy})`}>
+          <g key={i} transform={`translate(${dx}, ${dy + SHIFT_Y})`}>
             <circle cx={cx} cy={cy} r={dotR} fill="#10b981" />
           </g>
         );
@@ -221,6 +223,7 @@ function DraggableNumberLine({ dividend, divisor, onPick, locked }) {
 }
 
 function DivGroups({ dividend, divisor, motionSettings }) {
+  const SHIFT_Y = -4;
   const cols = divisor;
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 3.25 : 4;
@@ -229,12 +232,12 @@ function DivGroups({ dividend, divisor, motionSettings }) {
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full block">
       {Array.from({ length: dividend }).map((_, i) => (
         <circle
           key={i}
           cx={pad + (i % cols) * gap + gap / 2}
-          cy={pad + Math.floor(i / cols) * gap + gap / 2}
+          cy={pad + Math.floor(i / cols) * gap + gap / 2 + SHIFT_Y}
           r={dotR} fill="#06b6d4"
         />
       ))}
