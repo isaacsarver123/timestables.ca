@@ -54,8 +54,8 @@ function repulsion(cx, cy, pointer, range, force) {
   return { dx: (ddx / dist) * f, dy: (ddy / dist) * f };
 }
 
-const PUSH_FORCE = 0.6;
-const PUSH_RANGE_MULT = 1.0;
+const PUSH_FORCE = 0.4;
+const PUSH_RANGE_MULT = 1.65;
 
 // ── GroupedDots — `b` groups of `a` dots.
 function GroupedDots({ a, b }) {
@@ -64,10 +64,10 @@ function GroupedDots({ a, b }) {
     [rows, cols] = [cols, rows];
   }
   const total = rows * cols;
-  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 5 : 7;
+  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 4.5 : 7;
   const inGap = dotR * 2 + 6;
   const colGap = inGap + 12;
-  const pad = dotR + 4;                       // keep dots + repulsion inside viewBox
+  const pad = dotR + 14;                       // extra room so edge dots never clip
   const W = (cols - 1) * colGap + inGap + pad * 2;
   const H = rows * inGap + pad * 2;
 
@@ -121,9 +121,9 @@ function DotGrid({ a, b }) {
   let rows = b, cols = a;
   if (rows > cols * 1.6) [rows, cols] = [cols, rows];
   const total = rows * cols;
-  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 5 : 7;
+  const dotR = total > 80 ? 3 : total > 40 ? 4 : total > 16 ? 4.5 : 7;
   const gap = dotR * 2 + 8;
-  const pad = dotR + 4;
+  const pad = dotR + 14;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   const svgRef = useRef(null);
@@ -243,7 +243,7 @@ function DivGroups({ dividend, divisor }) {
   const rows = Math.ceil(dividend / cols);
   const dotR = dividend > 60 ? 4 : 5;
   const gap = dotR * 2 + 6;
-  const pad = dotR + 4;
+  const pad = dotR + 12;
   const W = cols * gap + pad * 2;
   const H = rows * gap + pad * 2;
   return (
@@ -354,7 +354,7 @@ export default function LessonQuestion({ question, onAnswer }) {
 
       <div className="flex-1 min-h-0 grid place-items-center mb-2">
         <div
-          className="brut-border bg-zinc-900 dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-[5/4] max-h-[42vh] overflow-hidden"
+          className="brut-border bg-zinc-900 dark:bg-zinc-950 rounded-2xl p-4 sm:p-5 grid place-items-center w-full max-w-sm aspect-square max-h-[46vh] overflow-hidden"
           data-testid="lesson-question-visual"
         >
           <div className="w-full h-full">{visual}</div>
