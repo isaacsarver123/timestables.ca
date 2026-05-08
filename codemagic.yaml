@@ -1,0 +1,49 @@
+workflows:
+  ios-release:
+    name: TimeTables iOS (Capacitor)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    environment:
+      node: 22
+      xcode: latest
+      vars:
+        BUNDLE_ID: ca.timestables.app
+        XCODE_WORKSPACE: frontend/ios/App/App.xcworkspace
+        XCODE_SCHEME: App
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: $BUNDLE_ID
+      groups:
+        - app_store_credentials
+
+    scripts:
+      - name: Install frontend dependencies
+        script: |
+          cd frontend
+          yarn install --frozen-lockfile || yarn install
+
+      - name: Build web app and sync Capacitor iOS
+        script: |
+          cd frontend
+          yarn build
+          npx cap sync ios
+
+      - name: Apply provisioning profiles
+        script: |
+          xcode-project use-profiles
+
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
